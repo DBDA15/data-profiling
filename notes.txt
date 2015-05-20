@@ -1,0 +1,24 @@
+Motivation
+	um Daten zu verstehen und zu verwenden/benutzen
+	hilfreich für Datenmodelierung, Datenintegration, Optimierung von Anfrageausführungen und um Anomalien zu finden
+
+Problematisch
+	NP-Hard[Gunopulos et al.]
+	schwierig, weil die Anzahl möglicher UCCs steigt exponential zur Anzahl der Eingabespalten
+
+Aufgabenstellung
+	nur nicht redundante UCC
+
+Algorithmen
+	BruteForce
+	GORDIAN
+	HCA (Buttom-Up)- statistical pruning
+	MapReduce based Unique Column Combination detection - row and column pruning
+		column pruning: prune column combination, = keine Kombinationen mit Uniques!
+		row pruning: beschleunige verifizierung von Kandidaten = Streiche Zeilen, die nur einmal vorkommen (nicht gobal sondern nur für das finden des Uniques mit dieser Spalte
+		- alle n-ColumnCombinationen werden gleichzeitig geprüft ({a},{b},{c}|{a,b},{a,c},{b,c}|{a,b,c})
+
+Performance
+	mit Realdaten und Syntetischen Daten
+	Speedup ratio
+	expansion rate

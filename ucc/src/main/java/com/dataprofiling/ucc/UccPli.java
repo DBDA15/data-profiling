@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +26,7 @@ import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.broadcast.Broadcast;
 
 import scala.Tuple2;
 
@@ -37,11 +39,10 @@ import scala.Tuple2;
 public class UccPli {
 
 	// global ucc state variables
-	private static int N = 0;
 	// encode column combinations as bit sets
 	private static Set<BitSet> minUcc = new HashSet<>();
 	private static final Set<BitSet> nonUniqueColumns = new HashSet<BitSet>();
-	private static Map<BitSet, Set<BitSet>> addedColumnCount = null;
+	//private static Map<BitSet, Set<BitSet>> addedColumnCount = null;
 
 	// TODO: implement trie for keeping track of min uniques and subset
 	// uniqueness checking
@@ -90,6 +91,7 @@ public class UccPli {
 				// columns
 
 				String[] strValues = s.split(",");
+				int N = strValues.length;
 				List<Cell> Cells = new ArrayList<Cell>();
 				for (int i = 0; i < N; i++) {
 					BitSet bs = new BitSet(N);
@@ -111,8 +113,8 @@ public class UccPli {
 	}
 
 	public static void main(String[] args) throws Exception {
-		final String inputFile = args[0] + "/" + args[1] + ".csv";
-		N = getColumnCount(inputFile);
+		final String inputFile = args[0];
+		//N = getColumnCount(inputFile);
 		JavaSparkContext spark = createSparkContext();
 		JavaRDD<String> file = spark.textFile(inputFile);
 		JavaRDD<Cell> cellValues = createCellValues(file);
@@ -123,6 +125,7 @@ public class UccPli {
 		plisSingleColumns.cache();
 		List<Tuple2<BitSet, List<LongArrayList>>> nonUniques = plisSingleColumns
 				.collect();
+
 		//System.out.println(nonUniques);
 
 		for (Tuple2<BitSet, List<LongArrayList>> nonUnique : nonUniques) {
@@ -130,165 +133,97 @@ public class UccPli {
 			minUcc.remove(nonUnique._1);
 		}
 
+		final Broadcast<Set<BitSet>> broadcastNonUniqueColumns = spark.broadcast(nonUniqueColumns);
+        
 		// JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumnsCopy =
 		// plisSingleColumns;
 		JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
 		boolean done = false;
+		
+		List<Tuple2<BitSet, List<LongArrayList>>> singlePLIs = plisSingleColumns.collect();
+		System.out.println(singlePLIs);
 
+        //addedColumnCount = new HashMap<BitSet, Set<BitSet>>();
+        
 		while (!done) {
-			// reset before generating a new round
-			addedColumnCount = new HashMap<BitSet, Set<BitSet>>();
+		    //System.out.println("addedColCount "+ addedColumnCount.size());
+		    //System.out.println("non-Unique" + nonUniqueColumns);
+		    Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
+		    
+		    
+			// reset before generating a new round			
 
 			// ----------------------------------------------------------------------------------------------------------------------------
 			// 1. CANDIDATE GENERATION
+			//System.out.println("currentLevelPLIs "+ currentLevelPLIs.collect());
+			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs =  currentLevelPLIs.mapToPair(new PairFunction<Tuple2<BitSet,List<LongArrayList>>, BitSet, Tuple2<BitSet,List<LongArrayList>>>() {
+               private static final long serialVersionUID = 1L;
+
+                @Override
+                public Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>> call(
+                        Tuple2<BitSet, List<LongArrayList>> t)
+                        throws Exception {
+
+                    BitSet bitSet = (BitSet) t._1().clone();
+                    int highestBit = bitSet.previousSetBit(bitSet.length());
+                    bitSet.clear(highestBit);                    
+                    return new Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>>(bitSet, t);
+                }
+            }).groupByKey().flatMap(new FlatMapFunction<Tuple2<BitSet,Iterable<Tuple2<BitSet,List<LongArrayList>>>>, Tuple2<BitSet,List<LongArrayList>>>() {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public Iterable<Tuple2<BitSet, List<LongArrayList>>> call(
+                        Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>> t)
+                        throws Exception {
+                    List<Tuple2<BitSet, List<LongArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
+                    List<Tuple2<BitSet, List<LongArrayList>>> tList = new ArrayList<Tuple2<BitSet,List<LongArrayList>>>();
+                    Iterator<Tuple2<BitSet, List<LongArrayList>>> it = t._2.iterator();
+                    while (it.hasNext()) {
+                        tList.add(it.next());
+                    };
+                    
+                    for (int i = 0; i < tList.size() - 1; i++) {
+                        for (int j = i+1; j < tList.size(); j++) {
+                            newCandidates.add(combine(tList.get(i), tList.get(j)));
+                        }
+                    }
+                    return newCandidates;
+                }
+
+                /**
+                 * This method combines two Indices, PLIs to one (index, pli)
+                 */
+                private Tuple2<BitSet, List<LongArrayList>> combine(
+                        Tuple2<BitSet, List<LongArrayList>> outer,
+                        Tuple2<BitSet, List<LongArrayList>> inner) {
+                    BitSet newColumCombination = (BitSet) outer._1.clone();
+                    newColumCombination.or(inner._1);
+                    List<LongArrayList> newPLI = intersect(outer._2, inner._2);
+                    return new Tuple2<BitSet, List<LongArrayList>>(newColumCombination, newPLI);
+                }
+            }).mapToPair(new PairFunction<Tuple2<BitSet,List<LongArrayList>>, BitSet, List<LongArrayList>>() {
+                private static final long serialVersionUID = 1L;
+
+                @Override
+                public Tuple2<BitSet, List<LongArrayList>> call(
+                        Tuple2<BitSet, List<LongArrayList>> t)
+                        throws Exception {
+                    return new Tuple2<BitSet, List<LongArrayList>>(t._1, t._2);
+                }
+            });
+		    
+
+            //TODO add subset check!!
 			
-			JavaPairRDD<BitSet, List<LongArrayList>> newCandidates2PreviousColumnCombinationPLIs = currentLevelPLIs
-					.flatMap(
-		new FlatMapFunction<Tuple2<BitSet, List<LongArrayList>>, Tuple2<BitSet, List<LongArrayList>>>() {
-
-								/**
-								 * 
-								 */
-								private static final long serialVersionUID = 1L;
-
-								@Override
-								public Iterable<Tuple2<BitSet, List<LongArrayList>>> call(
-										Tuple2<BitSet, List<LongArrayList>> t)
-										throws Exception {
-									List<Tuple2<BitSet, List<LongArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
-
-									BitSet columnCombination = t._1;
-									List<LongArrayList> thisLevelPLI = t._2();
-
-									Set<BitSet> nextLevelCandidates = generateNextLevelFor(columnCombination);
-
-									for (BitSet candidate : nextLevelCandidates) {
-										newCandidates
-												.add(new Tuple2<BitSet, List<LongArrayList>>(
-														candidate, thisLevelPLI));
-
-										// count how many times which unique
-										// column has been added to form a new
-										// candidate
-										BitSet addedColumn = (BitSet) candidate
-												.clone();
-										addedColumn.xor(columnCombination);
-										if (!addedColumnCount
-												.containsKey(addedColumn)) {
-											addedColumnCount.put(addedColumn,
-													new HashSet<BitSet>());
-										}
-										addedColumnCount.get(addedColumn).add(
-												candidate);
-
-									}
-									return newCandidates;
-								}
-
-							})
-					.mapToPair(
-							new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, List<LongArrayList>>() {
-
-								/**
-								 * 
-								 */
-								private static final long serialVersionUID = 1L;
-
-								@Override
-								public Tuple2<BitSet, List<LongArrayList>> call(
-										Tuple2<BitSet, List<LongArrayList>> t)
-										throws Exception {
-									return new Tuple2<BitSet, List<LongArrayList>>(
-											t._1, t._2);
-								}
-							});
-
-			if (newCandidates2PreviousColumnCombinationPLIs.isEmpty()) {
+			if (intersectedPLIs.isEmpty()) {
 				// abort processing once there are no new candidates to check
 				done = true;
 				break;
 			}
 
-			JavaPairRDD<BitSet, List<LongArrayList>> newCandidates2UniqueColumnPLIs = plisSingleColumns
-					.flatMap(
-							new FlatMapFunction<Tuple2<BitSet, List<LongArrayList>>, Tuple2<BitSet, List<LongArrayList>>>() {
 
-								/**
-								 * 
-								 */
-								private static final long serialVersionUID = 1L;
-
-								@Override
-								public Iterable<Tuple2<BitSet, List<LongArrayList>>> call(
-										Tuple2<BitSet, List<LongArrayList>> t)
-										throws Exception {
-
-									List<Tuple2<BitSet, List<LongArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
-									BitSet nonUniqueColumn = t._1;
-									List<LongArrayList> nonUniqueColumnPLI = t._2;
-
-									if (addedColumnCount
-											.containsKey(nonUniqueColumn)) {
-										Set<BitSet> candidates = addedColumnCount
-												.get(nonUniqueColumn);
-										for (BitSet candidate : candidates) {
-											newCandidates
-													.add(new Tuple2<BitSet, List<LongArrayList>>(
-															candidate,
-															nonUniqueColumnPLI));
-										}
-									}
-
-									return newCandidates;
-								}
-							})
-					.mapToPair(
-							new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, List<LongArrayList>>() {
-
-								/**
-								 * 
-								 */
-								private static final long serialVersionUID = 1L;
-
-								@Override
-								public Tuple2<BitSet, List<LongArrayList>> call(
-										Tuple2<BitSet, List<LongArrayList>> t)
-										throws Exception {
-									return new Tuple2<BitSet, List<LongArrayList>>(
-											t._1, t._2);
-								}
-
-							});
-
-//			System.out.println("1: "
-//					+ newCandidates2PreviousColumnCombinationPLIs.collect());
-//			System.out
-//					.println("2: " + newCandidates2UniqueColumnPLIs.collect());
-
-			// ----------------------------------------------------------------------------------------------------------------------------
-			// 2. INTERSECTION OF CANDIDATE PLIS
-			
-			// combine position lists from new candidates
-			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = newCandidates2PreviousColumnCombinationPLIs
-					.join(newCandidates2UniqueColumnPLIs)
-					.mapToPair(
-							new PairFunction<Tuple2<BitSet, Tuple2<List<LongArrayList>, List<LongArrayList>>>, BitSet, List<LongArrayList>>() {
-
-								/**
-								 * 
-								 */
-								private static final long serialVersionUID = 1L;
-
-								@Override
-								public Tuple2<BitSet, List<LongArrayList>> call(
-										Tuple2<BitSet, Tuple2<List<LongArrayList>, List<LongArrayList>>> t)
-										throws Exception {
-
-									return new Tuple2<BitSet, List<LongArrayList>>(
-											t._1, intersect(t._2._1, t._2._2));
-								}
-							});
-			
+			//System.out.println("intersectedPLIS"+ intersectedPLIs.collect());
 			// ----------------------------------------------------------------------------------------------------------------------------
 			// 3. FILTER UNIQUES AND NON UNIQUES
 			
@@ -331,16 +266,18 @@ public class UccPli {
 	 * level: A, B, C 2. level: A-> AB, AC - B-> BC 3. level: AB-> ABC
 	 * 
 	 * @param columnCombination
+	 * @param broadcastNonUniqueColumns 
 	 * @return
 	 */
-	private static Set<BitSet> generateNextLevelFor(BitSet columnCombination) {
+	private static Set<BitSet> generateNextLevelFor(BitSet columnCombination, Set<BitSet> broadcastNonUniqueColumns) {
 		Set<BitSet> nextLevelCandidates = new HashSet<BitSet>();
 
 		int cardinalityBefore = columnCombination.cardinality();
 		int highestBitBefore = columnCombination
 				.previousSetBit(columnCombination.size());
 
-		for (BitSet column : nonUniqueColumns) {
+		//Set<BitSet> nonUniqueColumnsLocal = broadcastNonUniqueColumns.value();
+		for (BitSet column : broadcastNonUniqueColumns) {
 			BitSet columnCombinationCopy = (BitSet) columnCombination.clone();
 			columnCombinationCopy.xor(column);
 
@@ -450,6 +387,7 @@ public class UccPli {
 	 */
 	private static boolean isSubsetUnique(BitSet columnCombination) {
 		for (BitSet bSet : minUcc) {
+		    System.out.println("minUcc (in isSubsetUnique)" + minUcc);
 			if (bSet.cardinality() > columnCombination.cardinality()) {
 				continue;
 			}

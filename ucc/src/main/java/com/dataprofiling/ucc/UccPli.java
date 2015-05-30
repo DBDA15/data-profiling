@@ -122,6 +122,7 @@ public class UccPli {
 				break;
 			}
 
+			long filterTime = System.currentTimeMillis();
 			// filter for non uniques and save uniques
 			JavaPairRDD<BitSet, List<LongArrayList>> nonUniqueCombinations = intersectedPLIs
 					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
@@ -139,6 +140,8 @@ public class UccPli {
 							return false;
 						}
 					}).cache();
+			System.out.println("filter nonuniques: "
+					+ (System.currentTimeMillis() - filterTime) + "ms");
 
 			long findnewminuccs = System.currentTimeMillis();
 			List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
@@ -160,9 +163,12 @@ public class UccPli {
 			System.out.println("Finding new minUccs (collect) took:"
 					+ (System.currentTimeMillis() - findnewminuccs) + "ms");
 
+			long addTime = System.currentTimeMillis();
 			for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
 				minUcc.add(tuple2._1);
 			}
+			System.out.println("adding new min Uccs:"
+					+ (System.currentTimeMillis() - addTime) + "ms");
 
 			// prepare new round of candidate generation
 			currentLevelPLIs = nonUniqueCombinations;

@@ -113,6 +113,7 @@ public class UccPli {
 			long startIntersection = System.currentTimeMillis();
 			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(
 					currentLevelPLIs, broadcastMinUCC.value()).cache();
+			intersectedPLIs.collect();
 			System.out.println("Generation/Intersection took: "
 					+ (System.currentTimeMillis() - startIntersection) + "ms");
 
@@ -140,6 +141,7 @@ public class UccPli {
 							return false;
 						}
 					}).cache();
+			nonUniqueCombinations.collect();
 			System.out.println("filter nonuniques: "
 					+ (System.currentTimeMillis() - filterTime) + "ms");
 

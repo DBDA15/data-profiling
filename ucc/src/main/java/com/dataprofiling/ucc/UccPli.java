@@ -290,6 +290,7 @@ public class UccPli {
 		// return v1;
 		// }
 		// });
+		long mapGrouptime = System.currentTimeMillis();
 		JavaPairRDD<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>> a = currentLevelPLIs
 				.mapToPair(
 						new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, Tuple2<BitSet, List<LongArrayList>>>() {
@@ -309,9 +310,13 @@ public class UccPli {
 							}
 						}).groupByKey();
 
+		a.collect();
+		System.out.println("maptopair + group time: "
+				+ (System.currentTimeMillis() - mapGrouptime) + "ms");
 		// System.out.println("size of groupedByKeyList " + a.collect().size());
 
-		return a.flatMap(
+		long flatMapIntersect = System.currentTimeMillis();
+		JavaRDD<Tuple2<BitSet, List<LongArrayList>>> b = a.flatMap(
 		// TODO: check how many times we get here for one round !!!
 
 				new FlatMapFunction<Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>>, Tuple2<BitSet, List<LongArrayList>>>() {
@@ -404,19 +409,21 @@ public class UccPli {
 						return new Tuple2<BitSet, List<LongArrayList>>(
 								newColumCombination, newPLI);
 					}
-				})
-				.mapToPair(
-						new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, List<LongArrayList>>() {
-							private static final long serialVersionUID = 1L;
+				});
+		b.collect();
 
-							@Override
-							public Tuple2<BitSet, List<LongArrayList>> call(
-									Tuple2<BitSet, List<LongArrayList>> t)
-									throws Exception {
-								return new Tuple2<BitSet, List<LongArrayList>>(
-										t._1, t._2);
-							}
-						});
+		System.out.println("flatmap which includes intersection time: "
+				+ (System.currentTimeMillis() - flatMapIntersect) + "ms");
+
+		return b.mapToPair(new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, List<LongArrayList>>() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public Tuple2<BitSet, List<LongArrayList>> call(
+					Tuple2<BitSet, List<LongArrayList>> t) throws Exception {
+				return new Tuple2<BitSet, List<LongArrayList>>(t._1, t._2);
+			}
+		});
 	}
 
 	private static List<LongArrayList> intersect(List<LongArrayList> thisPLI,

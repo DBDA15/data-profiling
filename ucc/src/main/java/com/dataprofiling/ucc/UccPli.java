@@ -220,49 +220,73 @@ public class UccPli {
      */
     private static JavaPairRDD<BitSet, List<LongArrayList>> generateNextLevelPLIs(
             JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs, final Set<BitSet> minUCC) {
-        return currentLevelPLIs
+         JavaPairRDD<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>> a = currentLevelPLIs
                 .mapToPair(
-                        new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, Tuple2<BitSet, List<LongArrayList>>>() {
+                        new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, List<Tuple2<BitSet, List<LongArrayList>>>>() {
                             private static final long serialVersionUID = 1L;
 
-                            @Override
-                            public Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>> call(
-                                    Tuple2<BitSet, List<LongArrayList>> t)
-                                    throws Exception {
-
-                                BitSet bitSet = (BitSet) t._1().clone();
+							@Override
+							public Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>> call(
+									Tuple2<BitSet, List<LongArrayList>> t)
+									throws Exception {
+								List<Tuple2<BitSet, List<LongArrayList>>> list = new ArrayList<Tuple2<BitSet,List<LongArrayList>>>();
+								list.add(t);
+								BitSet bitSet = (BitSet) t._1().clone();
                                 int highestBit = bitSet.previousSetBit(bitSet
                                         .length());
                                 bitSet.clear(highestBit);
-                                return new Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>>(
-                                        bitSet, t);
-                            }
-                        })
-                .groupByKey()
-                .flatMap( 
+                                return new Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>>(
+                                        bitSet, list);
+							}		
+                        }).reduceByKey(new Function2<List<Tuple2<BitSet,List<LongArrayList>>>, List<Tuple2<BitSet,List<LongArrayList>>>, List<Tuple2<BitSet,List<LongArrayList>>>>() {
+							
+							@Override
+							public List<Tuple2<BitSet, List<LongArrayList>>> call(
+									List<Tuple2<BitSet, List<LongArrayList>>> v1,
+									List<Tuple2<BitSet, List<LongArrayList>>> v2) throws Exception {
+								v1.addAll(v2);
+								return v1;
+							}
+						});
+         
+//         .mapToPair(
+//                 new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, Tuple2<BitSet, List<LongArrayList>>>() {
+//                     private static final long serialVersionUID = 1L;
+//
+//                     @Override
+//                     public Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>> call(
+//                             Tuple2<BitSet, List<LongArrayList>> t)
+//                             throws Exception {
+//
+//                         BitSet bitSet = (BitSet) t._1().clone();
+//                         int highestBit = bitSet.previousSetBit(bitSet
+//                                 .length());
+//                         bitSet.clear(highestBit);
+//                         return new Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>>(
+//                                 bitSet, t);
+//                     }
+//                 })
+//         .groupByKey()
+         System.out.println("size of groupedByKeyList " + a.collect().size());
+         
+         return a.flatMap( 
                 		// TODO: check how many times we get here for one round !!!
                 		
-                        new FlatMapFunction<Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>>, Tuple2<BitSet, List<LongArrayList>>>() {
+                        new FlatMapFunction<Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>>, Tuple2<BitSet, List<LongArrayList>>>() {
                             private static final long serialVersionUID = 1L;
                             
                             @Override
                             public Iterable<Tuple2<BitSet, List<LongArrayList>>> call(
-                                    Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>> t)
+                                    Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>> t)
                                     throws Exception {
                             	long startgeneration = System.currentTimeMillis();
                             	
                                 List<Tuple2<BitSet, List<LongArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
-                                List<Tuple2<BitSet, List<LongArrayList>>> tList = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
-                                Iterator<Tuple2<BitSet, List<LongArrayList>>> it = t._2
-                                        .iterator();
-                                while (it.hasNext()) {
-                                    tList.add(it.next());
-                                }
 
-                                for (int i = 0; i < tList.size() - 1; i++) {
-                                    for (int j = i + 1; j < tList.size(); j++) {
-                                        Tuple2<BitSet, List<LongArrayList>> intersection = combine(tList.get(i),
-                                                tList.get(j));
+                                for (int i = 0; i < t._2.size() - 1; i++) {
+                                    for (int j = i + 1; j < t._2.size(); j++) {
+                                        Tuple2<BitSet, List<LongArrayList>> intersection = combine(t._2.get(i),
+                                                t._2.get(j));
                                         if (intersection._2 != null) {
                                             newCandidates.add(intersection);
                                         }

@@ -112,9 +112,13 @@ public class UccPli {
 			// generate candidates
 			long startIntersection = System.currentTimeMillis();
 			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(
-					currentLevelPLIs, broadcastMinUCC.value()).cache();
+					currentLevelPLIs, broadcastMinUCC.value());
+			long cacheTime = System.currentTimeMillis();
+			intersectedPLIs.cache();
+			System.out.println("caching took: "
+					+ (System.currentTimeMillis() - cacheTime) + "ms");
 			// intersectedPLIs.collect();
-			System.out.println("Generation/Intersection took: "
+			System.out.println("Generation/Intersection took: 					"
 					+ (System.currentTimeMillis() - startIntersection) + "ms");
 
 			if (intersectedPLIs.isEmpty()) {

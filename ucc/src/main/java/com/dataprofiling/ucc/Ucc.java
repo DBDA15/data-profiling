@@ -60,9 +60,12 @@ public class Ucc {
 
 	public static void main(String[] args) throws Exception {
 		final String inputFile = args[0] + "/" + args[1] + ".csv";
-		N = getColumnCount(inputFile);
 		JavaSparkContext spark = createSparkContext();
 		JavaRDD<String> file = spark.textFile(inputFile);
+
+		String firstLine = file.first();
+		N = firstLine.split(",").length;
+		// getColumnCount(inputFile);
 		JavaRDD<Attribute> attributeValues = createAttributeValues(file);
 
 		if (DEBUG)

@@ -113,7 +113,7 @@ public class UccPli {
 			long startIntersection = System.currentTimeMillis();
 			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(
 					currentLevelPLIs, broadcastMinUCC.value()).cache();
-			intersectedPLIs.collect();
+			// intersectedPLIs.collect();
 			System.out.println("Generation/Intersection took: "
 					+ (System.currentTimeMillis() - startIntersection) + "ms");
 

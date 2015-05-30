@@ -1,7 +1,7 @@
 package com.dataprofiling.ucc;
 
-import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongArrayList;
+import it.unimi.dsi.fastutil.ints.Int2IntOpenHashMap;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 
 import java.io.Serializable;
 import java.util.ArrayList;
@@ -79,25 +79,25 @@ public class UccPli {
 				+ (System.currentTimeMillis() - start2) + "ms");
 
 		// get PLI for non unique columns
-		JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumns = createPLIs(cellValues);
+		JavaPairRDD<BitSet, List<IntArrayList>> plisSingleColumns = createPLIs(cellValues);
 		// every round the single column PLIs will be combined with the current
 		// level column combinations
 		plisSingleColumns.cache();
-		List<Tuple2<BitSet, List<LongArrayList>>> nonUniques = plisSingleColumns
+		List<Tuple2<BitSet, List<IntArrayList>>> nonUniques = plisSingleColumns
 				.collect();
 
 		// System.out.println(nonUniques);
 
-		for (Tuple2<BitSet, List<LongArrayList>> nonUnique : nonUniques) {
+		for (Tuple2<BitSet, List<IntArrayList>> nonUnique : nonUniques) {
 			minUcc.remove(nonUnique._1);
 		}
 
-		// JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumnsCopy =
+		// JavaPairRDD<BitSet, List<IntArrayList>> plisSingleColumnsCopy =
 		// plisSingleColumns;
-		JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
+		JavaPairRDD<BitSet, List<IntArrayList>> currentLevelPLIs = plisSingleColumns;
 		boolean done = false;
 
-		// List<Tuple2<BitSet, List<LongArrayList>>> singlePLIs =
+		// List<Tuple2<BitSet, List<IntArrayList>>> singlePLIs =
 		// plisSingleColumns
 		// .collect();
 		// System.out.println(singlePLIs);
@@ -114,7 +114,7 @@ public class UccPli {
 
 			// generate candidates
 			long startIntersection = System.currentTimeMillis();
-			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(
+			JavaPairRDD<BitSet, List<IntArrayList>> intersectedPLIs = generateNextLevelPLIs(
 					currentLevelPLIs, broadcastMinUCC.value());
 			long cacheTime = System.currentTimeMillis();
 			intersectedPLIs.cache();
@@ -132,13 +132,13 @@ public class UccPli {
 
 			long filterTime = System.currentTimeMillis();
 			// filter for non uniques and save uniques
-			JavaPairRDD<BitSet, List<LongArrayList>> nonUniqueCombinations = intersectedPLIs
-					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
+			JavaPairRDD<BitSet, List<IntArrayList>> nonUniqueCombinations = intersectedPLIs
+					.filter(new Function<Tuple2<BitSet, List<IntArrayList>>, Boolean>() {
 						private static final long serialVersionUID = 1L;
 
 						@Override
 						public Boolean call(
-								Tuple2<BitSet, List<LongArrayList>> v1)
+								Tuple2<BitSet, List<IntArrayList>> v1)
 								throws Exception {
 							if (!v1._2.isEmpty()) {
 								// candidate is not unique if there are any
@@ -153,13 +153,13 @@ public class UccPli {
 					+ (System.currentTimeMillis() - filterTime) + "ms");
 
 			long findnewminuccs = System.currentTimeMillis();
-			List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
-					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
+			List<Tuple2<BitSet, List<IntArrayList>>> newMinUCC = intersectedPLIs
+					.filter(new Function<Tuple2<BitSet, List<IntArrayList>>, Boolean>() {
 						private static final long serialVersionUID = 1L;
 
 						@Override
 						public Boolean call(
-								Tuple2<BitSet, List<LongArrayList>> v1)
+								Tuple2<BitSet, List<IntArrayList>> v1)
 								throws Exception {
 							if (!v1._2.isEmpty()) {
 								// candidate is not unique if there are any
@@ -173,7 +173,7 @@ public class UccPli {
 					+ (System.currentTimeMillis() - findnewminuccs) + "ms");
 
 			long addTime = System.currentTimeMillis();
-			for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
+			for (Tuple2<BitSet, List<IntArrayList>> tuple2 : newMinUCC) {
 				minUcc.add(tuple2._1);
 			}
 			System.out.println("adding new min Uccs:"
@@ -263,60 +263,60 @@ public class UccPli {
 	 * @return nextLevelPLIs (which may include some subsets which are already
 	 *         unique)
 	 */
-	private static JavaPairRDD<BitSet, List<LongArrayList>> generateNextLevelPLIs(
-			JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs,
+	private static JavaPairRDD<BitSet, List<IntArrayList>> generateNextLevelPLIs(
+			JavaPairRDD<BitSet, List<IntArrayList>> currentLevelPLIs,
 			final Set<BitSet> minUCC) {
-		// JavaPairRDD<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>> a =
+		// JavaPairRDD<BitSet, List<Tuple2<BitSet, List<IntArrayList>>>> a =
 		// currentLevelPLIs
 		// .mapToPair(
-		// new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet,
-		// List<Tuple2<BitSet, List<LongArrayList>>>>() {
+		// new PairFunction<Tuple2<BitSet, List<IntArrayList>>, BitSet,
+		// List<Tuple2<BitSet, List<IntArrayList>>>>() {
 		// private static final long serialVersionUID = 1L;
 		//
 		// @Override
-		// public Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>>
+		// public Tuple2<BitSet, List<Tuple2<BitSet, List<IntArrayList>>>>
 		// call(
-		// Tuple2<BitSet, List<LongArrayList>> t)
+		// Tuple2<BitSet, List<IntArrayList>> t)
 		// throws Exception {
-		// List<Tuple2<BitSet, List<LongArrayList>>> list = new
-		// ArrayList<Tuple2<BitSet,List<LongArrayList>>>();
+		// List<Tuple2<BitSet, List<IntArrayList>>> list = new
+		// ArrayList<Tuple2<BitSet,List<IntArrayList>>>();
 		// list.add(t);
 		// BitSet bitSet = (BitSet) t._1().clone();
 		// int highestBit = bitSet.previousSetBit(bitSet
 		// .length());
 		// bitSet.clear(highestBit);
-		// return new Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>>(
+		// return new Tuple2<BitSet, List<Tuple2<BitSet, List<IntArrayList>>>>(
 		// bitSet, list);
 		// }
 		// }).reduceByKey(new
-		// Function2<List<Tuple2<BitSet,List<LongArrayList>>>,
-		// List<Tuple2<BitSet,List<LongArrayList>>>,
-		// List<Tuple2<BitSet,List<LongArrayList>>>>() {
+		// Function2<List<Tuple2<BitSet,List<IntArrayList>>>,
+		// List<Tuple2<BitSet,List<IntArrayList>>>,
+		// List<Tuple2<BitSet,List<IntArrayList>>>>() {
 		//
 		// @Override
-		// public List<Tuple2<BitSet, List<LongArrayList>>> call(
-		// List<Tuple2<BitSet, List<LongArrayList>>> v1,
-		// List<Tuple2<BitSet, List<LongArrayList>>> v2) throws Exception {
+		// public List<Tuple2<BitSet, List<IntArrayList>>> call(
+		// List<Tuple2<BitSet, List<IntArrayList>>> v1,
+		// List<Tuple2<BitSet, List<IntArrayList>>> v2) throws Exception {
 		// v1.addAll(v2);
 		// return v1;
 		// }
 		// });
 		long mapGrouptime = System.currentTimeMillis();
-		JavaPairRDD<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>> a = currentLevelPLIs
+		JavaPairRDD<BitSet, Iterable<Tuple2<BitSet, List<IntArrayList>>>> a = currentLevelPLIs
 				.mapToPair(
-						new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, Tuple2<BitSet, List<LongArrayList>>>() {
+						new PairFunction<Tuple2<BitSet, List<IntArrayList>>, BitSet, Tuple2<BitSet, List<IntArrayList>>>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>> call(
-									Tuple2<BitSet, List<LongArrayList>> t)
+							public Tuple2<BitSet, Tuple2<BitSet, List<IntArrayList>>> call(
+									Tuple2<BitSet, List<IntArrayList>> t)
 									throws Exception {
 
 								BitSet bitSet = (BitSet) t._1().clone();
 								int highestBit = bitSet.previousSetBit(bitSet
 										.length());
 								bitSet.clear(highestBit);
-								return new Tuple2<BitSet, Tuple2<BitSet, List<LongArrayList>>>(
+								return new Tuple2<BitSet, Tuple2<BitSet, List<IntArrayList>>>(
 										bitSet, t);
 							}
 						}).groupByKey();
@@ -327,21 +327,21 @@ public class UccPli {
 		// System.out.println("size of groupedByKeyList " + a.collect().size());
 
 		long flatMapIntersect = System.currentTimeMillis();
-		JavaRDD<Tuple2<BitSet, List<LongArrayList>>> b = a.flatMap(
+		JavaRDD<Tuple2<BitSet, List<IntArrayList>>> b = a.flatMap(
 		// TODO: check how many times we get here for one round !!!
 
-				new FlatMapFunction<Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>>, Tuple2<BitSet, List<LongArrayList>>>() {
+				new FlatMapFunction<Tuple2<BitSet, Iterable<Tuple2<BitSet, List<IntArrayList>>>>, Tuple2<BitSet, List<IntArrayList>>>() {
 					private static final long serialVersionUID = 1L;
 
 					@Override
-					public Iterable<Tuple2<BitSet, List<LongArrayList>>> call(
-							Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>> t)
+					public Iterable<Tuple2<BitSet, List<IntArrayList>>> call(
+							Tuple2<BitSet, Iterable<Tuple2<BitSet, List<IntArrayList>>>> t)
 							throws Exception {
 						long startgeneration = System.currentTimeMillis();
 
-						List<Tuple2<BitSet, List<LongArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
-						List<Tuple2<BitSet, List<LongArrayList>>> tList = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
-						Iterator<Tuple2<BitSet, List<LongArrayList>>> it = t._2
+						List<Tuple2<BitSet, List<IntArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<IntArrayList>>>();
+						List<Tuple2<BitSet, List<IntArrayList>>> tList = new ArrayList<Tuple2<BitSet, List<IntArrayList>>>();
+						Iterator<Tuple2<BitSet, List<IntArrayList>>> it = t._2
 								.iterator();
 
 						while (it.hasNext()) {
@@ -350,7 +350,7 @@ public class UccPli {
 
 						for (int i = 0; i < tList.size() - 1; i++) {
 							for (int j = i + 1; j < tList.size(); j++) {
-								Tuple2<BitSet, List<LongArrayList>> intersection = combine(
+								Tuple2<BitSet, List<IntArrayList>> intersection = combine(
 										tList.get(i), tList.get(j));
 								if (intersection._2 != null) {
 									newCandidates.add(intersection);
@@ -368,24 +368,24 @@ public class UccPli {
 					}
 
 					// new FlatMapFunction<Tuple2<BitSet, List<Tuple2<BitSet,
-					// List<LongArrayList>>>>, Tuple2<BitSet,
-					// List<LongArrayList>>>() {
+					// List<IntArrayList>>>>, Tuple2<BitSet,
+					// List<IntArrayList>>>() {
 					// private static final long serialVersionUID = 1L;
 					//
 					// @Override
-					// public Iterable<Tuple2<BitSet, List<LongArrayList>>>
+					// public Iterable<Tuple2<BitSet, List<IntArrayList>>>
 					// call(
-					// Tuple2<BitSet, List<Tuple2<BitSet, List<LongArrayList>>>>
+					// Tuple2<BitSet, List<Tuple2<BitSet, List<IntArrayList>>>>
 					// t)
 					// throws Exception {
 					// long startgeneration = System.currentTimeMillis();
 					//
-					// List<Tuple2<BitSet, List<LongArrayList>>> newCandidates =
-					// new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
+					// List<Tuple2<BitSet, List<IntArrayList>>> newCandidates =
+					// new ArrayList<Tuple2<BitSet, List<IntArrayList>>>();
 					//
 					// for (int i = 0; i < t._2.size() - 1; i++) {
 					// for (int j = i + 1; j < t._2.size(); j++) {
-					// Tuple2<BitSet, List<LongArrayList>> intersection =
+					// Tuple2<BitSet, List<IntArrayList>> intersection =
 					// combine(t._2.get(i),
 					// t._2.get(j));
 					// if (intersection._2 != null) {
@@ -405,19 +405,19 @@ public class UccPli {
 					 * This method combines two Indices, PLIs to one (index,
 					 * pli)
 					 */
-					private Tuple2<BitSet, List<LongArrayList>> combine(
-							Tuple2<BitSet, List<LongArrayList>> outer,
-							Tuple2<BitSet, List<LongArrayList>> inner) {
+					private Tuple2<BitSet, List<IntArrayList>> combine(
+							Tuple2<BitSet, List<IntArrayList>> outer,
+							Tuple2<BitSet, List<IntArrayList>> inner) {
 						BitSet newColumCombination = (BitSet) outer._1.clone();
 						newColumCombination.or(inner._1);
-						List<LongArrayList> newPLI = null;
+						List<IntArrayList> newPLI = null;
 
 						// do subset check
 						// if (!isSubsetUnique(newColumCombination, minUCC)) {
 						newPLI = intersect(outer._2, inner._2);
 						// }
 
-						return new Tuple2<BitSet, List<LongArrayList>>(
+						return new Tuple2<BitSet, List<IntArrayList>>(
 								newColumCombination, newPLI);
 					}
 				});
@@ -426,30 +426,30 @@ public class UccPli {
 		System.out.println("flatmap which includes intersection time: "
 				+ (System.currentTimeMillis() - flatMapIntersect) + "ms");
 
-		return b.mapToPair(new PairFunction<Tuple2<BitSet, List<LongArrayList>>, BitSet, List<LongArrayList>>() {
+		return b.mapToPair(new PairFunction<Tuple2<BitSet, List<IntArrayList>>, BitSet, List<IntArrayList>>() {
 			private static final long serialVersionUID = 1L;
 
 			@Override
-			public Tuple2<BitSet, List<LongArrayList>> call(
-					Tuple2<BitSet, List<LongArrayList>> t) throws Exception {
-				return new Tuple2<BitSet, List<LongArrayList>>(t._1, t._2);
+			public Tuple2<BitSet, List<IntArrayList>> call(
+					Tuple2<BitSet, List<IntArrayList>> t) throws Exception {
+				return new Tuple2<BitSet, List<IntArrayList>>(t._1, t._2);
 			}
 		});
 	}
 
-	private static List<LongArrayList> intersect(List<LongArrayList> thisPLI,
-			List<LongArrayList> otherPLI) {
+	private static List<IntArrayList> intersect(List<IntArrayList> thisPLI,
+			List<IntArrayList> otherPLI) {
 		// thisPLI: e.g. {{1,2,3},{4,5}}
 		// otherPLI: e.g. {{1,3},{2,5}}
 
 		// intersected PLI for above example: {{1,3}
-		List<LongArrayList> intersection = new ArrayList<>();
+		List<IntArrayList> intersection = new ArrayList<>();
 
-		Long2LongOpenHashMap hashedPLI = asHashMap(thisPLI);
-		Map<LongPair, LongArrayList> map = new HashMap<>();
+		Int2IntOpenHashMap hashedPLI = asHashMap(thisPLI);
+		Map<IntPair, IntArrayList> map = new HashMap<>();
 		buildMap(otherPLI, hashedPLI, map);
 
-		for (LongArrayList cluster : map.values()) {
+		for (IntArrayList cluster : map.values()) {
 			if (cluster.size() < 2) {
 				continue;
 			}
@@ -458,13 +458,13 @@ public class UccPli {
 		return intersection;
 	}
 
-	private static void buildMap(List<LongArrayList> otherPLI,
-			Long2LongOpenHashMap hashedPLI, Map<LongPair, LongArrayList> map) {
-		long uniqueValueCount = 0;
-		for (LongArrayList sameValues : otherPLI) {
-			for (long rowIndex : sameValues) {
+	private static void buildMap(List<IntArrayList> otherPLI,
+			Int2IntOpenHashMap hashedPLI, Map<IntPair, IntArrayList> map) {
+		int uniqueValueCount = 0;
+		for (IntArrayList sameValues : otherPLI) {
+			for (int rowIndex : sameValues) {
 				if (hashedPLI.containsKey(rowIndex)) {
-					LongPair pair = new LongPair(uniqueValueCount,
+					IntPair pair = new IntPair(uniqueValueCount,
 							hashedPLI.get(rowIndex));
 					updateMap(map, rowIndex, pair);
 				}
@@ -473,13 +473,13 @@ public class UccPli {
 		}
 	}
 
-	private static void updateMap(Map<LongPair, LongArrayList> map,
-			long rowIndex, LongPair pair) {
+	private static void updateMap(Map<IntPair, IntArrayList> map, int rowIndex,
+			IntPair pair) {
 		if (map.containsKey(pair)) {
-			LongArrayList currentList = map.get(pair);
+			IntArrayList currentList = map.get(pair);
 			currentList.add(rowIndex);
 		} else {
-			LongArrayList newList = new LongArrayList();
+			IntArrayList newList = new IntArrayList();
 			newList.add(rowIndex);
 			map.put(pair, newList);
 		}
@@ -493,12 +493,11 @@ public class UccPli {
 	 *
 	 * @return the pli as hash map
 	 */
-	private static Long2LongOpenHashMap asHashMap(List<LongArrayList> clusters) {
-		Long2LongOpenHashMap hashedPLI = new Long2LongOpenHashMap(
-				clusters.size());
-		long uniqueValueCount = 0;
-		for (LongArrayList sameValues : clusters) {
-			for (long rowIndex : sameValues) {
+	private static Int2IntOpenHashMap asHashMap(List<IntArrayList> clusters) {
+		Int2IntOpenHashMap hashedPLI = new Int2IntOpenHashMap(clusters.size());
+		int uniqueValueCount = 0;
+		for (IntArrayList sameValues : clusters) {
+			for (int rowIndex : sameValues) {
 				hashedPLI.put(rowIndex, uniqueValueCount);
 			}
 			uniqueValueCount++;
@@ -533,66 +532,66 @@ public class UccPli {
 		return false;
 	}
 
-	private static JavaPairRDD<BitSet, List<LongArrayList>> createPLIs(
+	private static JavaPairRDD<BitSet, List<IntArrayList>> createPLIs(
 			JavaRDD<Cell> cellValues) {
 
-		JavaPairRDD<Cell, LongArrayList> cell2Positions = cellValues.mapToPair(
-				new PairFunction<UccPli.Cell, Cell, LongArrayList>() {
+		JavaPairRDD<Cell, IntArrayList> cell2Positions = cellValues.mapToPair(
+				new PairFunction<UccPli.Cell, Cell, IntArrayList>() {
 					private static final long serialVersionUID = 1L;
 
 					@Override
-					public Tuple2<Cell, LongArrayList> call(Cell t)
+					public Tuple2<Cell, IntArrayList> call(Cell t)
 							throws Exception {
-						LongArrayList rowIndex = new LongArrayList();
+						IntArrayList rowIndex = new IntArrayList();
 						rowIndex.add(t.rowIndex);
-						return new Tuple2<UccPli.Cell, LongArrayList>(t,
+						return new Tuple2<UccPli.Cell, IntArrayList>(t,
 								rowIndex);
 					}
 				}).reduceByKey(
-				new Function2<LongArrayList, LongArrayList, LongArrayList>() {
+				new Function2<IntArrayList, IntArrayList, IntArrayList>() {
 					private static final long serialVersionUID = 1L;
 
 					@Override
-					public LongArrayList call(LongArrayList v1, LongArrayList v2)
+					public IntArrayList call(IntArrayList v1, IntArrayList v2)
 							throws Exception {
 						v1.addAll(v2);
 						return v1;
 					}
 				});
 
-		JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumns = cell2Positions
-				.filter(new Function<Tuple2<Cell, LongArrayList>, Boolean>() {
+		JavaPairRDD<BitSet, List<IntArrayList>> plisSingleColumns = cell2Positions
+				.filter(new Function<Tuple2<Cell, IntArrayList>, Boolean>() {
 					private static final long serialVersionUID = 1L;
 
 					@Override
-					public Boolean call(Tuple2<UccPli.Cell, LongArrayList> v1)
+					public Boolean call(Tuple2<UccPli.Cell, IntArrayList> v1)
 							throws Exception {
 						return v1._2.size() != 1;
 					}
 				})
 				.mapToPair(
-						new PairFunction<Tuple2<Cell, LongArrayList>, BitSet, List<LongArrayList>>() {
+						new PairFunction<Tuple2<Cell, IntArrayList>, BitSet, List<IntArrayList>>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public Tuple2<BitSet, List<LongArrayList>> call(
-									Tuple2<Cell, LongArrayList> v1)
+							public Tuple2<BitSet, List<IntArrayList>> call(
+									Tuple2<Cell, IntArrayList> v1)
 									throws Exception {
-								List<LongArrayList> listOfRedundantValueLists = new ArrayList<LongArrayList>();
+								List<IntArrayList> listOfRedundantValueLists = new ArrayList<IntArrayList>();
 								listOfRedundantValueLists.add(v1._2);
-								return new Tuple2<BitSet, List<LongArrayList>>(
+								return new Tuple2<BitSet, List<IntArrayList>>(
 										v1._1.columnIndex,
 										listOfRedundantValueLists);
 							}
 						})
 				.reduceByKey(
-						new Function2<List<LongArrayList>, List<LongArrayList>, List<LongArrayList>>() {
+						new Function2<List<IntArrayList>, List<IntArrayList>, List<IntArrayList>>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public List<LongArrayList> call(
-									List<LongArrayList> v1,
-									List<LongArrayList> v2) throws Exception {
+							public List<IntArrayList> call(
+									List<IntArrayList> v1, List<IntArrayList> v2)
+									throws Exception {
 								v1.addAll(v2);
 								return v1;
 							}
@@ -604,11 +603,11 @@ public class UccPli {
 	static class Cell implements Serializable {
 		private static final long serialVersionUID = 1L;
 		BitSet columnIndex;
-		long rowIndex;
+		int rowIndex;
 		// TODO: data type
 		String value;
 
-		public Cell(BitSet columnIndex, long rowIndex, String value) {
+		public Cell(BitSet columnIndex, int rowIndex, String value) {
 			this.columnIndex = columnIndex;
 			this.rowIndex = rowIndex;
 			this.value = value;

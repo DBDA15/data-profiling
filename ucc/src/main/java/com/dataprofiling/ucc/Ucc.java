@@ -367,6 +367,7 @@ public class Ucc {
 
 		// print distinct columns
 		List<Tuple2<BitSet, Integer>> result = columnAttrMaxCount.collect();
+		System.out.println("N " + N);
 		for (int i = 0; i < N; i++) {
 			if (result.get(i)._2 == 1) {
 				if (DEBUG)

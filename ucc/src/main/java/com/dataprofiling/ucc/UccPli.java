@@ -67,82 +67,82 @@ public class UccPli {
 
         // System.out.println(nonUniques);
 
-        for (Tuple2<BitSet, List<LongArrayList>> nonUnique : nonUniques) {
-            minUcc.remove(nonUnique._1);
-        }
-
-        // JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumnsCopy =
-        // plisSingleColumns;
-        JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
-        boolean done = false;
-
-        List<Tuple2<BitSet, List<LongArrayList>>> singlePLIs = plisSingleColumns
-                .collect();
-        System.out.println(singlePLIs);
-
-        // addedColumnCount = new HashMap<BitSet, Set<BitSet>>();
-
-        while (!done) {
-        	long startLoop = System.currentTimeMillis();
-            Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
-            System.out.println("Broadcast took: " + (System.currentTimeMillis() - startLoop) + "ms");
-            
-            //generate candidates
-            long startIntersection = System.currentTimeMillis();
-            JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(currentLevelPLIs, broadcastMinUCC.value()).cache();
-            System.out.println("Generation/Intersection took: " + (System.currentTimeMillis() - startIntersection) + "ms");
-            
-            if (intersectedPLIs.isEmpty()) {
-                // abort processing once there are no new candidates to check
-                done = true;
-                break;
-            }
-
-            // filter for non uniques and save uniques
-            JavaPairRDD<BitSet, List<LongArrayList>> nonUniqueCombinations = intersectedPLIs
-                    .filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
-                        private static final long serialVersionUID = 1L;
-
-                        @Override
-                        public Boolean call(
-                                Tuple2<BitSet, List<LongArrayList>> v1)
-                                throws Exception {
-                            if (!v1._2.isEmpty()) {
-                                // candidate is not unique if there are any
-                                // redundant values
-                                return true;
-                            } 
-                            return false;
-                        }
-                    }).cache();
-            
-            long findnewminuccs = System.currentTimeMillis();
-            List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
-                    .filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
-                        private static final long serialVersionUID = 1L;
-
-                        @Override
-                        public Boolean call(
-                                Tuple2<BitSet, List<LongArrayList>> v1)
-                                throws Exception {
-                            if (!v1._2.isEmpty()) {
-                                // candidate is not unique if there are any
-                                // redundant values
-                                return false;
-                            } 
-                            return true;
-                        }
-                    }).collect();
-            System.out.println("Finding new minUccs (collect) took:" + (System.currentTimeMillis() - findnewminuccs) + "ms");
-            
-            for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
-                minUcc.add(tuple2._1);
-            }
-            
-            // prepare new round of candidate generation
-            currentLevelPLIs = nonUniqueCombinations;
-            System.out.println("Finished another iteration: " + (System.currentTimeMillis() - startLoop) + "ms");
-        }
+//        for (Tuple2<BitSet, List<LongArrayList>> nonUnique : nonUniques) {
+//            minUcc.remove(nonUnique._1);
+//        }
+//
+//        // JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumnsCopy =
+//        // plisSingleColumns;
+//        JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
+//        boolean done = false;
+//
+//        List<Tuple2<BitSet, List<LongArrayList>>> singlePLIs = plisSingleColumns
+//                .collect();
+//        System.out.println(singlePLIs);
+//
+//        // addedColumnCount = new HashMap<BitSet, Set<BitSet>>();
+//
+//        while (!done) {
+//        	long startLoop = System.currentTimeMillis();
+//            Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
+//            System.out.println("Broadcast took: " + (System.currentTimeMillis() - startLoop) + "ms");
+//            
+//            //generate candidates
+//            long startIntersection = System.currentTimeMillis();
+//            JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(currentLevelPLIs, broadcastMinUCC.value()).cache();
+//            System.out.println("Generation/Intersection took: " + (System.currentTimeMillis() - startIntersection) + "ms");
+//            
+//            if (intersectedPLIs.isEmpty()) {
+//                // abort processing once there are no new candidates to check
+//                done = true;
+//                break;
+//            }
+//
+//            // filter for non uniques and save uniques
+//            JavaPairRDD<BitSet, List<LongArrayList>> nonUniqueCombinations = intersectedPLIs
+//                    .filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
+//                        private static final long serialVersionUID = 1L;
+//
+//                        @Override
+//                        public Boolean call(
+//                                Tuple2<BitSet, List<LongArrayList>> v1)
+//                                throws Exception {
+//                            if (!v1._2.isEmpty()) {
+//                                // candidate is not unique if there are any
+//                                // redundant values
+//                                return true;
+//                            } 
+//                            return false;
+//                        }
+//                    }).cache();
+//            
+//            long findnewminuccs = System.currentTimeMillis();
+//            List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
+//                    .filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
+//                        private static final long serialVersionUID = 1L;
+//
+//                        @Override
+//                        public Boolean call(
+//                                Tuple2<BitSet, List<LongArrayList>> v1)
+//                                throws Exception {
+//                            if (!v1._2.isEmpty()) {
+//                                // candidate is not unique if there are any
+//                                // redundant values
+//                                return false;
+//                            } 
+//                            return true;
+//                        }
+//                    }).collect();
+//            System.out.println("Finding new minUccs (collect) took:" + (System.currentTimeMillis() - findnewminuccs) + "ms");
+//            
+//            for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
+//                minUcc.add(tuple2._1);
+//            }
+//            
+//            // prepare new round of candidate generation
+//            currentLevelPLIs = nonUniqueCombinations;
+//            System.out.println("Finished another iteration: " + (System.currentTimeMillis() - startLoop) + "ms");
+//        }
         
         
         System.out.println("Runtime: " + (System.currentTimeMillis() - start) / 1000 + "s");
@@ -268,7 +268,7 @@ public class UccPli {
                  })
          .groupByKey();
          
-         System.out.println("size of groupedByKeyList " + a.collect().size());
+//         System.out.println("size of groupedByKeyList " + a.collect().size());
          
          return a.flatMap( 
                 		// TODO: check how many times we get here for one round !!!

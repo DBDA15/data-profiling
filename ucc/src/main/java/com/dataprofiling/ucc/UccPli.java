@@ -147,7 +147,7 @@ public class UccPli {
 							return false;
 						}
 					}).cache();
-			nonUniqueCombinations.collect();
+			// onUniqueCombinations.collect();
 			System.out.println("filter nonuniques: "
 					+ (System.currentTimeMillis() - filterTime) + "ms");
 
@@ -320,7 +320,7 @@ public class UccPli {
 							}
 						}).groupByKey();
 
-		a.collect();
+		// a.collect();
 		System.out.println("maptopair + group time: "
 				+ (System.currentTimeMillis() - mapGrouptime) + "ms");
 		// System.out.println("size of groupedByKeyList " + a.collect().size());
@@ -420,7 +420,7 @@ public class UccPli {
 								newColumCombination, newPLI);
 					}
 				});
-		b.collect();
+		// b.collect();
 
 		System.out.println("flatmap which includes intersection time: "
 				+ (System.currentTimeMillis() - flatMapIntersect) + "ms");

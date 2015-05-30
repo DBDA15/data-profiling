@@ -29,13 +29,21 @@ public class UccPli {
     // private static PatriciaTrie<BitSet> uniques = new PatriciaTrie<BitSet>();
 
     public static void main(String[] args) throws Exception {
+    	long start = System.currentTimeMillis();
+    	
         // encode column combinations as bit sets
         Set<BitSet> minUcc = new HashSet<>();
         
         final String inputFile = args[0];
         // N = getColumnCount(inputFile);
         JavaSparkContext spark = createSparkContext();
+        System.out.println("Created context: " + (System.currentTimeMillis() - start) + "ms");
+        
         JavaRDD<String> file = spark.textFile(inputFile);
+        
+        System.out.println("Read file: " + (System.currentTimeMillis() - start) + "ms");
+        
+        
         String firstLine = file.first();
         int n = firstLine.split(delimiter).length;
         for (int i = 0; i < n; i++) {
@@ -43,9 +51,12 @@ public class UccPli {
             bitSet.set(i);
             minUcc.add(bitSet);
         }
-
+        long before = System.currentTimeMillis() - start;
+        System.out.println("Before createCellValues: " + before + "ms");
+        long start2 = System.currentTimeMillis();
         JavaRDD<Cell> cellValues = createCellValues(file);
-
+        System.out.println("After createCellValues: " + (System.currentTimeMillis() - start2) + "ms");
+        
         // get PLI for non unique columns
         JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumns = createPLIs(cellValues);
         // every round the single column PLIs will be combined with the current
@@ -72,11 +83,15 @@ public class UccPli {
         // addedColumnCount = new HashMap<BitSet, Set<BitSet>>();
 
         while (!done) {
+        	long startLoop = System.currentTimeMillis();
             Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
-
+            System.out.println("Broadcast took: " + (System.currentTimeMillis() - startLoop) + "ms");
+            
             //generate candidates
+            long startIntersection = System.currentTimeMillis();
             JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(currentLevelPLIs, broadcastMinUCC.value()).cache();
-
+            System.out.println("Generation/Intersection took: " + (System.currentTimeMillis() - startIntersection) + "ms");
+            
             if (intersectedPLIs.isEmpty()) {
                 // abort processing once there are no new candidates to check
                 done = true;
@@ -101,6 +116,7 @@ public class UccPli {
                         }
                     }).cache();
             
+            long findnewminuccs = System.currentTimeMillis();
             List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
                     .filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
                         private static final long serialVersionUID = 1L;
@@ -117,15 +133,19 @@ public class UccPli {
                             return true;
                         }
                     }).collect();
-
+            System.out.println("Finding new minUccs (collect) took:" + (System.currentTimeMillis() - findnewminuccs) + "ms");
+            
             for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
                 minUcc.add(tuple2._1);
             }
             
             // prepare new round of candidate generation
             currentLevelPLIs = nonUniqueCombinations;
+            System.out.println("Finished another iteration: " + (System.currentTimeMillis() - startLoop) + "ms");
         }
-
+        
+        
+        System.out.println("Runtime: " + (System.currentTimeMillis() - start) / 1000 + "s");
         System.out.println("Minimal Unique Column Combinations: " + minUcc);
         spark.close();
     }
@@ -145,27 +165,45 @@ public class UccPli {
      * @return
      */
     private static JavaRDD<Cell> createCellValues(JavaRDD<String> file) {
-        return file.flatMap(new FlatMapFunction<String, Cell>() {
-            private static final long serialVersionUID = 1L;
-            long rowIndex = 0;
+    	return file.zipWithIndex().flatMap(new FlatMapFunction<Tuple2<String,Long>, Cell>() {
+			private static final long serialVersionUID = 1L;
 
-            public Iterable<Cell> call(String s) {
-                // under the assumption of horizontal partitioning
-                // a local row index should work for combining multiple
-                // columns
-
-                String[] strValues = s.split(delimiter);
+			@Override
+			public Iterable<Cell> call(Tuple2<String, Long> t)
+					throws Exception {
+				String[] strValues = t._1.split(delimiter);
                 int N = strValues.length;
                 List<Cell> Cells = new ArrayList<Cell>();
                 for (int i = 0; i < N; i++) {
                     BitSet bs = new BitSet(N);
                     bs.set(i);
-                    Cells.add(new Cell(bs, rowIndex, strValues[i]));
+                    Cells.add(new Cell(bs, t._2, strValues[i]));
                 }
-                rowIndex++;
                 return Cells;
-            }
-        });
+			}
+		});
+		
+//        return file.flatMap(new FlatMapFunction<String, Cell>() {
+//            private static final long serialVersionUID = 1L;
+//            long rowIndex = 0;
+//
+//            public Iterable<Cell> call(String s) {
+//                // under the assumption of horizontal partitioning
+//                // a local row index should work for combining multiple
+//                // columns
+//
+//                String[] strValues = s.split(delimiter);
+//                int N = strValues.length;
+//                List<Cell> Cells = new ArrayList<Cell>();
+//                for (int i = 0; i < N; i++) {
+//                    BitSet bs = new BitSet(N);
+//                    bs.set(i);
+//                    Cells.add(new Cell(bs, rowIndex, strValues[i]));
+//                }
+//                rowIndex++;
+//                return Cells;
+//            }
+//        });
     }
 
     /**
@@ -201,14 +239,18 @@ public class UccPli {
                             }
                         })
                 .groupByKey()
-                .flatMap(
+                .flatMap( 
+                		// TODO: check how many times we get here for one round !!!
+                		
                         new FlatMapFunction<Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>>, Tuple2<BitSet, List<LongArrayList>>>() {
                             private static final long serialVersionUID = 1L;
-
+                            
                             @Override
                             public Iterable<Tuple2<BitSet, List<LongArrayList>>> call(
                                     Tuple2<BitSet, Iterable<Tuple2<BitSet, List<LongArrayList>>>> t)
                                     throws Exception {
+                            	long startgeneration = System.currentTimeMillis();
+                            	
                                 List<Tuple2<BitSet, List<LongArrayList>>> newCandidates = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
                                 List<Tuple2<BitSet, List<LongArrayList>>> tList = new ArrayList<Tuple2<BitSet, List<LongArrayList>>>();
                                 Iterator<Tuple2<BitSet, List<LongArrayList>>> it = t._2
@@ -216,7 +258,6 @@ public class UccPli {
                                 while (it.hasNext()) {
                                     tList.add(it.next());
                                 }
-                                ;
 
                                 for (int i = 0; i < tList.size() - 1; i++) {
                                     for (int j = i + 1; j < tList.size(); j++) {
@@ -227,6 +268,9 @@ public class UccPli {
                                         }
                                     }
                                 }
+                                
+                                // TODO: output veeery many times: how often does this really need to be run per iteration?
+                                System.out.println("Generation/Intersection inside took: " + (System.currentTimeMillis() - startgeneration) + "ms");
                                 return newCandidates;
                             }
 

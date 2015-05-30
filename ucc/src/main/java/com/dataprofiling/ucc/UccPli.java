@@ -103,13 +103,14 @@ public class UccPli {
 		// System.out.println(singlePLIs);
 
 		// addedColumnCount = new HashMap<BitSet, Set<BitSet>>();
+
+		Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
+		// System.out.println("Broadcast took: "
+		// + (System.currentTimeMillis() - startLoop) + "ms");
 		int current = 0;
 		while (!done && current < round) {
 			current++;
 			long startLoop = System.currentTimeMillis();
-			Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
-			System.out.println("Broadcast took: "
-					+ (System.currentTimeMillis() - startLoop) + "ms");
 
 			// generate candidates
 			long startIntersection = System.currentTimeMillis();
@@ -412,9 +413,9 @@ public class UccPli {
 						List<LongArrayList> newPLI = null;
 
 						// do subset check
-						if (!isSubsetUnique(newColumCombination, minUCC)) {
-							newPLI = intersect(outer._2, inner._2);
-						}
+						// if (!isSubsetUnique(newColumCombination, minUCC)) {
+						newPLI = intersect(outer._2, inner._2);
+						// }
 
 						return new Tuple2<BitSet, List<LongArrayList>>(
 								newColumCombination, newPLI);

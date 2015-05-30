@@ -34,17 +34,18 @@ import scala.Tuple2;
  */
 public class UccPli {
 
-	final static String delimiter = ",";
-
-	// private static Map<BitSet, Set<BitSet>> addedColumnCount = null;
-
 	// TODO: implement trie for keeping track of min uniques and subset
 	// uniqueness checking
 	// private static PatriciaTrie<BitSet> uniques = new PatriciaTrie<BitSet>();
 
 	public static void main(String[] args) throws Exception {
 		int round = Integer.MAX_VALUE;
-		if (args.length > 1 && args[1] != null)
+		if (args.length < 2 || args[1] == null) {
+			System.err.println("Missing delimiter!");
+			System.exit(-1);
+		}
+		String delimiter = args[1];
+		if (args.length > 2 && args[2] != null)
 			round = Integer.valueOf(args[1]);
 		long start = System.currentTimeMillis();
 
@@ -62,6 +63,7 @@ public class UccPli {
 		System.out.println("Read file: " + (System.currentTimeMillis() - start)
 				+ "ms");
 
+		Broadcast<String> bcDelimiter = spark.broadcast(delimiter);
 		String firstLine = file.first();
 		int n = firstLine.split(delimiter).length;
 		for (int i = 0; i < n; i++) {
@@ -72,7 +74,7 @@ public class UccPli {
 		long before = System.currentTimeMillis() - start;
 		System.out.println("Before createCellValues: " + before + "ms");
 		long start2 = System.currentTimeMillis();
-		JavaRDD<Cell> cellValues = createCellValues(file);
+		JavaRDD<Cell> cellValues = createCellValues(file, bcDelimiter);
 		System.out.println("After createCellValues: "
 				+ (System.currentTimeMillis() - start2) + "ms");
 
@@ -118,7 +120,7 @@ public class UccPli {
 			System.out.println("caching took: "
 					+ (System.currentTimeMillis() - cacheTime) + "ms");
 			// intersectedPLIs.collect();
-			System.out.println("Generation/Intersection took: 					"
+			System.out.println("Generation/Intersection took:"
 					+ (System.currentTimeMillis() - startIntersection) + "ms");
 
 			if (intersectedPLIs.isEmpty()) {
@@ -200,9 +202,11 @@ public class UccPli {
 	 * 
 	 * @param file
 	 *            spark file
+	 * @param bcDelimiter
 	 * @return
 	 */
-	private static JavaRDD<Cell> createCellValues(JavaRDD<String> file) {
+	private static JavaRDD<Cell> createCellValues(JavaRDD<String> file,
+			final Broadcast<String> bcDelimiter) {
 		// return file.zipWithIndex().flatMap(new
 		// FlatMapFunction<Tuple2<String,Long>, Cell>() {
 		// private static final long serialVersionUID = 1L;
@@ -224,12 +228,14 @@ public class UccPli {
 
 		return file.flatMap(new FlatMapFunction<String, Cell>() {
 			private static final long serialVersionUID = 1L;
+			String delimiter = bcDelimiter.getValue();
 
 			public Iterable<Cell> call(String s) {
 				// under the assumption of horizontal partitioning
 				// a local row index should work for combining multiple
 				// columns
-				int rowIndex = s.hashCode() + ((int) (Math.random() * 100));
+				int rowIndex = (s + ((int) (Math.random() * 1000000)))
+						.hashCode();
 				String[] strValues = s.split(delimiter);
 				int N = strValues.length;
 				List<Cell> Cells = new ArrayList<Cell>();

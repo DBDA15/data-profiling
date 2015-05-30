@@ -165,45 +165,44 @@ public class UccPli {
      * @return
      */
     private static JavaRDD<Cell> createCellValues(JavaRDD<String> file) {
-    	return file.zipWithIndex().flatMap(new FlatMapFunction<Tuple2<String,Long>, Cell>() {
-			private static final long serialVersionUID = 1L;
-
-			@Override
-			public Iterable<Cell> call(Tuple2<String, Long> t)
-					throws Exception {
-				String[] strValues = t._1.split(delimiter);
-                int N = strValues.length;
-                List<Cell> Cells = new ArrayList<Cell>();
-                for (int i = 0; i < N; i++) {
-                    BitSet bs = new BitSet(N);
-                    bs.set(i);
-                    Cells.add(new Cell(bs, t._2, strValues[i]));
-                }
-                return Cells;
-			}
-		});
-		
-//        return file.flatMap(new FlatMapFunction<String, Cell>() {
-//            private static final long serialVersionUID = 1L;
-//            long rowIndex = 0;
+//    	return file.zipWithIndex().flatMap(new FlatMapFunction<Tuple2<String,Long>, Cell>() {
+//			private static final long serialVersionUID = 1L;
 //
-//            public Iterable<Cell> call(String s) {
-//                // under the assumption of horizontal partitioning
-//                // a local row index should work for combining multiple
-//                // columns
-//
-//                String[] strValues = s.split(delimiter);
+//			@Override
+//			public Iterable<Cell> call(Tuple2<String, Long> t)
+//					throws Exception {
+//				String[] strValues = t._1.split(delimiter);
 //                int N = strValues.length;
 //                List<Cell> Cells = new ArrayList<Cell>();
 //                for (int i = 0; i < N; i++) {
 //                    BitSet bs = new BitSet(N);
 //                    bs.set(i);
-//                    Cells.add(new Cell(bs, rowIndex, strValues[i]));
+//                    Cells.add(new Cell(bs, t._2, strValues[i]));
 //                }
-//                rowIndex++;
 //                return Cells;
-//            }
-//        });
+//			}
+//		});
+		
+        return file.flatMap(new FlatMapFunction<String, Cell>() {
+            private static final long serialVersionUID = 1L;
+
+            public Iterable<Cell> call(String s) {
+                // under the assumption of horizontal partitioning
+                // a local row index should work for combining multiple
+                // columns
+            	int rowIndex	= s.hashCode() + ((int)(Math.random()*100));
+                String[] strValues = s.split(delimiter);
+                int N = strValues.length;
+                List<Cell> Cells = new ArrayList<Cell>();
+                for (int i = 0; i < N; i++) {
+                    BitSet bs = new BitSet(N);
+                    bs.set(i);
+                    Cells.add(new Cell(bs, rowIndex, strValues[i]));
+                }
+                rowIndex++;
+                return Cells;
+            }
+        });
     }
 
     /**

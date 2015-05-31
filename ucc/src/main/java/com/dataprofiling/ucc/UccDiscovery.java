@@ -85,72 +85,72 @@ public class UccDiscovery {
 			minUcc.remove(nonUnique._1);
 		}
 
-		JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
-		Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
-		Set<BitSet> localMinUcc = broadcastMinUCC.value(); // TODO: check if slaves receive it
-		boolean done = false;
-		int currentLevel = 0;
-		
-		while (!done && currentLevel < levelsToCheck) {
-			long startLoop = System.currentTimeMillis();
-			currentLevel++;
-
-			// generate candidates
-			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(
-					currentLevelPLIs, localMinUcc);
-			// intersectedPLIs.cache(); TODO: caching?
-			
-			if (intersectedPLIs.isEmpty()) {
-				// abort processing once there are no new candidates to check
-				done = true;
-				break;
-			}
-
-			// filter for non uniques and save uniques
-			JavaPairRDD<BitSet, List<LongArrayList>> nonUniqueCombinations = intersectedPLIs
-					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
-						private static final long serialVersionUID = 1L;
-
-						@Override
-						public Boolean call(
-								Tuple2<BitSet, List<LongArrayList>> v1)
-								throws Exception {
-							if (!v1._2.isEmpty()) {
-								// candidate is not unique if there are any
-								// redundant values
-								return true;
-							}
-							return false;
-						}
-					}); // cache() ?
-
-			List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
-					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
-						private static final long serialVersionUID = 1L;
-
-						@Override
-						public Boolean call(
-								Tuple2<BitSet, List<LongArrayList>> v1)
-								throws Exception {
-							if (!v1._2.isEmpty()) {
-								// candidate is not unique if there are any
-								// redundant values
-								return false;
-							}
-							return true;
-						}
-					}).collect();
-			
-			for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
-				minUcc.add(tuple2._1);
-			}
-			
-			// prepare new round of candidate generation
-			currentLevelPLIs = nonUniqueCombinations;
-			System.out.println("Finished another iteration: "
-					+ (System.currentTimeMillis() - startLoop) + "ms");
-		}
-		
+//		JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
+//		Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
+//		Set<BitSet> localMinUcc = broadcastMinUCC.value(); // TODO: check if slaves receive it
+//		boolean done = false;
+//		int currentLevel = 0;
+//		
+//		while (!done && currentLevel < levelsToCheck) {
+//			long startLoop = System.currentTimeMillis();
+//			currentLevel++;
+//
+//			// generate candidates
+//			JavaPairRDD<BitSet, List<LongArrayList>> intersectedPLIs = generateNextLevelPLIs(
+//					currentLevelPLIs, localMinUcc);
+//			// intersectedPLIs.cache(); TODO: caching?
+//			
+//			if (intersectedPLIs.isEmpty()) {
+//				// abort processing once there are no new candidates to check
+//				done = true;
+//				break;
+//			}
+//
+//			// filter for non uniques and save uniques
+//			JavaPairRDD<BitSet, List<LongArrayList>> nonUniqueCombinations = intersectedPLIs
+//					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
+//						private static final long serialVersionUID = 1L;
+//
+//						@Override
+//						public Boolean call(
+//								Tuple2<BitSet, List<LongArrayList>> v1)
+//								throws Exception {
+//							if (!v1._2.isEmpty()) {
+//								// candidate is not unique if there are any
+//								// redundant values
+//								return true;
+//							}
+//							return false;
+//						}
+//					}); // cache() ?
+//
+//			List<Tuple2<BitSet, List<LongArrayList>>> newMinUCC = intersectedPLIs
+//					.filter(new Function<Tuple2<BitSet, List<LongArrayList>>, Boolean>() {
+//						private static final long serialVersionUID = 1L;
+//
+//						@Override
+//						public Boolean call(
+//								Tuple2<BitSet, List<LongArrayList>> v1)
+//								throws Exception {
+//							if (!v1._2.isEmpty()) {
+//								// candidate is not unique if there are any
+//								// redundant values
+//								return false;
+//							}
+//							return true;
+//						}
+//					}).collect();
+//			
+//			for (Tuple2<BitSet, List<LongArrayList>> tuple2 : newMinUCC) {
+//				minUcc.add(tuple2._1);
+//			}
+//			
+//			// prepare new round of candidate generation
+//			currentLevelPLIs = nonUniqueCombinations;
+//			System.out.println("Finished another iteration: "
+//					+ (System.currentTimeMillis() - startLoop) + "ms");
+//		}
+//		
 		long end = System.currentTimeMillis();
 		System.out.println("Runtime: " + (end - start) / 1000 + "s");
 		System.out.println("Minimal Unique Column Combinations: " + minUcc);

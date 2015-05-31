@@ -397,7 +397,9 @@ public class UccDiscovery {
 
 	private static JavaPairRDD<BitSet, List<LongArrayList>> createPLIs(
 			JavaRDD<Cell> cellValues) {
-//		LongArrayList dummy = new LongArrayList();
+		LongArrayList dummy = new LongArrayList();
+		List<LongArrayList> dummy2 = new ArrayList<LongArrayList>();
+		
 		return cellValues
 				.mapToPair(
 						new PairFunction<UccDiscovery.Cell, Cell, LongArrayList>() {
@@ -412,26 +414,27 @@ public class UccDiscovery {
 										t, rowIndex);
 							}
 						})
-//						.foldByKey(dummy, new Function2<LongArrayList, LongArrayList, LongArrayList>() {
-//							
-//							@Override
-//							public LongArrayList call(LongArrayList v1, LongArrayList v2)
-//									throws Exception {
-//								v1.addAll(v2);
-//								return v1;
-//							}
-//						})
-				.reduceByKey(
-						new Function2<LongArrayList, LongArrayList, LongArrayList>() {
+						.foldByKey(dummy, new Function2<LongArrayList, LongArrayList, LongArrayList>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public LongArrayList call(LongArrayList v1,
-									LongArrayList v2) throws Exception {
+							public LongArrayList call(LongArrayList v1, LongArrayList v2)
+									throws Exception {
 								v1.addAll(v2);
 								return v1;
 							}
 						})
+//				.reduceByKey(
+//						new Function2<LongArrayList, LongArrayList, LongArrayList>() {
+//							private static final long serialVersionUID = 1L;
+//
+//							@Override
+//							public LongArrayList call(LongArrayList v1,
+//									LongArrayList v2) throws Exception {
+//								v1.addAll(v2);
+//								return v1;
+//							}
+//						})
 				.filter(new Function<Tuple2<Cell, LongArrayList>, Boolean>() {
 					private static final long serialVersionUID = 1L;
 
@@ -457,19 +460,27 @@ public class UccDiscovery {
 										v1._1.columnIndex,
 										listOfRedundantValueLists);
 							}
-						})
-				.reduceByKey(
-						new Function2<List<LongArrayList>, List<LongArrayList>, List<LongArrayList>>() {
-							private static final long serialVersionUID = 1L;
-
+						}).foldByKey(dummy2, new Function2<List<LongArrayList>, List<LongArrayList>, List<LongArrayList>>() {
+							
 							@Override
-							public List<LongArrayList> call(
-									List<LongArrayList> v1,
+							public List<LongArrayList> call(List<LongArrayList> v1,
 									List<LongArrayList> v2) throws Exception {
 								v1.addAll(v2);
 								return v1;
 							}
 						});
+//				.reduceByKey(
+//						new Function2<List<LongArrayList>, List<LongArrayList>, List<LongArrayList>>() {
+//							private static final long serialVersionUID = 1L;
+//
+//							@Override
+//							public List<LongArrayList> call(
+//									List<LongArrayList> v1,
+//									List<LongArrayList> v2) throws Exception {
+//								v1.addAll(v2);
+//								return v1;
+//							}
+//						});
 	}
 
 	static class Cell implements Serializable {

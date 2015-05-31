@@ -66,9 +66,9 @@ public class UccDiscovery {
 		
 		String firstLine = file.first();
 		int n = firstLine.split(delimiter).length;
-		BitSet bitSet = new BitSet(n);
+		
 		for (int i = 0; i < n; i++) {
-			bitSet.clear();
+			BitSet bitSet = new BitSet(n);
 			bitSet.set(i);
 			minUcc.add(bitSet);
 		}
@@ -78,6 +78,7 @@ public class UccDiscovery {
 
 		// get PLI for non unique columns
 		JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumns = createPLIs(cellValues); // TODO: caching?
+		System.out.println(plisSingleColumns.collect());
 		
 		List<Tuple2<BitSet, List<LongArrayList>>> nonUniques = plisSingleColumns.collect();
 		for (Tuple2<BitSet, List<LongArrayList>> nonUnique : nonUniques) {
@@ -184,9 +185,8 @@ public class UccDiscovery {
 						int N = strValues.length;
 						List<Cell> Cells = new ArrayList<Cell>();
 						
-						BitSet bs = new BitSet(N);
 						for (int i = 0; i < N; i++) {
-							bs.clear();
+							BitSet bs = new BitSet(N);
 							bs.set(i);
 							Cells.add(new Cell(bs, t._2, strValues[i]));
 						}

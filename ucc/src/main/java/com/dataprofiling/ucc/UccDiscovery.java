@@ -233,7 +233,7 @@ public class UccDiscovery {
 							}
 						})
 						// combine those combinations that share the same prefix
-						.groupByKey(8) // TODO: check if good
+						.groupByKey() // TODO: check if good
 						// create tuples for new column combinations with intersected plis
 						.flatMap(
 

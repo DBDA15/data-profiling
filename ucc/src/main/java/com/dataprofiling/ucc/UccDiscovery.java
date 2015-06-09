@@ -15,6 +15,7 @@ import java.util.Set;
 
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -23,6 +24,23 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
+import org.apache.spark.scheduler.SparkListener;
+import org.apache.spark.scheduler.SparkListenerApplicationEnd;
+import org.apache.spark.scheduler.SparkListenerApplicationStart;
+import org.apache.spark.scheduler.SparkListenerBlockManagerAdded;
+import org.apache.spark.scheduler.SparkListenerBlockManagerRemoved;
+import org.apache.spark.scheduler.SparkListenerEnvironmentUpdate;
+import org.apache.spark.scheduler.SparkListenerExecutorAdded;
+import org.apache.spark.scheduler.SparkListenerExecutorMetricsUpdate;
+import org.apache.spark.scheduler.SparkListenerExecutorRemoved;
+import org.apache.spark.scheduler.SparkListenerJobEnd;
+import org.apache.spark.scheduler.SparkListenerJobStart;
+import org.apache.spark.scheduler.SparkListenerStageCompleted;
+import org.apache.spark.scheduler.SparkListenerStageSubmitted;
+import org.apache.spark.scheduler.SparkListenerTaskEnd;
+import org.apache.spark.scheduler.SparkListenerTaskGettingResult;
+import org.apache.spark.scheduler.SparkListenerTaskStart;
+import org.apache.spark.scheduler.SparkListenerUnpersistRDD;
 
 import scala.Tuple2;
 
@@ -57,7 +75,125 @@ public class UccDiscovery {
 		// encode column combinations as bit sets
 		Set<BitSet> minUcc = new HashSet<>();
 
-		JavaSparkContext spark = createSparkContext();
+        SparkConf config = new SparkConf().setAppName("de.hpi.dbda.UccDiscovery");
+		SparkContext s = new SparkContext(config);
+		s.addSparkListener(new SparkListener() {
+            
+            @Override
+            public void onUnpersistRDD(SparkListenerUnpersistRDD arg0) {
+                // TODO Auto-generated method stub
+
+                System.out.println("onUnpersistRDD");
+            }
+            
+            @Override
+            public void onTaskStart(SparkListenerTaskStart arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onTaskStart");
+                
+            }
+            
+            @Override
+            public void onTaskGettingResult(SparkListenerTaskGettingResult arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onTaskGettingResult");
+                
+            }
+            
+            @Override
+            public void onTaskEnd(SparkListenerTaskEnd arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onTaskEnd");
+                
+            }
+            
+            @Override
+            public void onStageSubmitted(SparkListenerStageSubmitted arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onStageSubmitted");
+                
+            }
+            
+            @Override
+            public void onStageCompleted(SparkListenerStageCompleted arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onStageCompleted");
+                
+            }
+            
+            @Override
+            public void onJobStart(SparkListenerJobStart arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onJobStart");
+                
+            }
+            
+            @Override
+            public void onJobEnd(SparkListenerJobEnd arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onJobEnd");
+                
+            }
+            
+            @Override
+            public void onExecutorRemoved(SparkListenerExecutorRemoved arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onExecutorRemoved");
+                
+            }
+            
+            @Override
+            public void onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onExecutorMetricsUpdate");
+                
+            }
+            
+            @Override
+            public void onExecutorAdded(SparkListenerExecutorAdded arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("Executer added: " + arg0.executorId());
+            }
+            
+            @Override
+            public void onEnvironmentUpdate(SparkListenerEnvironmentUpdate arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onEnvironmentUpdate");
+                
+            }
+            
+            @Override
+            public void onBlockManagerRemoved(SparkListenerBlockManagerRemoved arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onBlockManagerRemoved");
+                
+            }
+            
+            @Override
+            public void onBlockManagerAdded(SparkListenerBlockManagerAdded arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onBlockManagerAdded");
+                
+            }
+            
+            @Override
+            public void onApplicationStart(SparkListenerApplicationStart arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onApplicationStart");
+                
+            }
+            
+            @Override
+            public void onApplicationEnd(SparkListenerApplicationEnd arg0) {
+                // TODO Auto-generated method stub
+                System.out.println("onApplicationEnd");
+                
+            }
+        });
+		
+        JavaSparkContext spark = new JavaSparkContext(s);
+        
+        
 		JavaRDD<String> file = spark.textFile(inputFile);
 
 		// let slaves know what the column delimiter is
@@ -174,21 +310,23 @@ public class UccDiscovery {
 	 */
 	private static JavaRDD<Cell> createCellValues(JavaRDD<String> file,
 			final String delimiter) {
-		return file.zipWithIndex().flatMap(
-				new FlatMapFunction<Tuple2<String, Long>, Cell>() {
+		return file.flatMap(
+				new FlatMapFunction<String, Cell>() {
 					private static final long serialVersionUID = 1L;
 
 					@Override
-					public Iterable<Cell> call(Tuple2<String, Long> t)
+					public Iterable<Cell> call(String t)
 							throws Exception {
-						String[] strValues = t._1.split(delimiter);
+						String[] strValues = t.split(delimiter);
 						int N = strValues.length;
 						List<Cell> Cells = new ArrayList<Cell>();
+						
+						long rowIndex = (long) (Math.random() * Long.MAX_VALUE);
 						
 						for (int i = 0; i < N; i++) {
 							BitSet bs = new BitSet(N);
 							bs.set(i);
-							Cells.add(new Cell(bs, t._2, strValues[i]));
+							Cells.add(new Cell(bs, rowIndex, strValues[i]));
 						}
 						return Cells;
 					}

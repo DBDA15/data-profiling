@@ -100,34 +100,34 @@ public class UccDiscoveryOpt {
 		JavaRDD<Cell> cellValues = createCellValues(file, localDelimiter);
 
 		// get PLI for non unique columns
-		JavaPairRDD<BitSet, List<LongArrayList>> plisSingleColumns = createPLIs(cellValues); // TODO: caching?
+		JavaPairRDD<BitSet, List<List<Long>>> plisSingleColumns = createPLIs(cellValues); // TODO: caching?
 		System.out.println(plisSingleColumns.collect());
 		
-		List<Tuple2<BitSet, List<LongArrayList>>> nonUniques = plisSingleColumns.collect();
-		for (Tuple2<BitSet, List<LongArrayList>> nonUnique : nonUniques) {
+		List<Tuple2<BitSet, List<List<Long>>>> nonUniques = plisSingleColumns.collect();
+		for (Tuple2<BitSet, List<List<Long>>> nonUnique : nonUniques) {
 			minUcc.remove(nonUnique._1);
 		}
 
-		JavaPairRDD<BitSet, List<LongArrayList>> currentLevelPLIs = plisSingleColumns;
+		JavaPairRDD<BitSet, List<List<Long>>> currentLevelPLIs = plisSingleColumns;
 		Broadcast<Set<BitSet>> broadcastMinUCC = spark.broadcast(minUcc);
 		Set<BitSet> localMinUcc = broadcastMinUCC.value(); // TODO: check if slaves receive it
 		boolean done = false;
 		int currentLevel = 0;
 		
 		// save singleColumPLIs and broadcast it
-		List<Tuple2<BitSet, List<LongArrayList>>> pliList = plisSingleColumns.collect();
-		Broadcast<List<Tuple2<BitSet, List<LongArrayList>>>> broadcastSingleColPLI = spark.broadcast(pliList);
-		List<Tuple2<BitSet, List<LongArrayList>>> localSingleColPLI = broadcastSingleColPLI.value();
-		HashMap<BitSet, List<LongArrayList>> pliHashMap= new HashMap<BitSet, List<LongArrayList>>();
+		List<Tuple2<BitSet, List<List<Long>>>> pliList = plisSingleColumns.collect();
+		Broadcast<List<Tuple2<BitSet, List<List<Long>>>>> broadcastSingleColPLI = spark.broadcast(pliList);
+		List<Tuple2<BitSet, List<List<Long>>>> localSingleColPLI = broadcastSingleColPLI.value();
+		HashMap<BitSet, List<List<Long>>> pliHashMap= new HashMap<BitSet, List<List<Long>>>();
 		for (int i = 0; i < localSingleColPLI.size(); i++) {
-		    Tuple2<BitSet, List<LongArrayList>> ele = localSingleColPLI.get(i);
+		    Tuple2<BitSet, List<List<Long>>> ele = localSingleColPLI.get(i);
             pliHashMap.put(ele._1, ele._2);
         }
 		
-		JavaRDD<BitSet> currentCandidates = currentLevelPLIs.map(new Function<Tuple2<BitSet,List<LongArrayList>>, BitSet>() {
+		JavaRDD<BitSet> currentCandidates = currentLevelPLIs.map(new Function<Tuple2<BitSet,List<List<Long>>>, BitSet>() {
 
             @Override
-            public BitSet call(Tuple2<BitSet, List<LongArrayList>> v1)
+            public BitSet call(Tuple2<BitSet, List<List<Long>>> v1)
                     throws Exception {
                 return v1._1;
             }
@@ -304,7 +304,7 @@ public class UccDiscoveryOpt {
 	 * @return true - unique, false -> non -unique
 	 */
 	private static JavaPairRDD<BitSet, Boolean> generateNextLevelPLIs(
-			final HashMap<BitSet, List<LongArrayList>> pliHashMap,
+			final HashMap<BitSet, List<List<Long>>> pliHashMap,
 			final JavaRDD<BitSet> candidates, int nodes) {
 		candidates.repartition(nodes);
 		
@@ -313,11 +313,11 @@ public class UccDiscoveryOpt {
             @Override
             public Tuple2<BitSet, Boolean> call(BitSet bs) throws Exception {
                 // TODO Auto-generated method stub
-                List<LongArrayList> pli =  null; 
+                List<List<Long>> pli =  null; 
                 for (int i = bs.nextSetBit(0); i >= 0; i = bs.nextSetBit(i+1)) {
                     BitSet current = new BitSet(bs.size());
                     current.set(i);
-                    List<LongArrayList> currentPLI = pliHashMap.get(current);
+                    List<List<Long>> currentPLI = pliHashMap.get(current);
                     if (pli == null) {
                         pli = currentPLI;
                     } else {
@@ -333,13 +333,13 @@ public class UccDiscoveryOpt {
         });		
 	}
 
-	private static List<LongArrayList> intersect(List<LongArrayList> thisPLI,
-			List<LongArrayList> otherPLI) {
+	private static List<List<Long>> intersect(List<List<Long>> thisPLI,
+			List<List<Long>> otherPLI) {
 		// thisPLI: e.g. {{1,2,3},{4,5}}
 		// otherPLI: e.g. {{1,3},{2,5}}
 
 		// intersected PLI for above example: {{1,3}
-		List<LongArrayList> intersection = new ArrayList<>();
+		List<List<Long>> intersection = new ArrayList<>();
 
 		Long2LongOpenHashMap hashedPLI = asHashMap(thisPLI);
 		Map<LongPair, LongArrayList> map = new HashMap<>();
@@ -354,10 +354,10 @@ public class UccDiscoveryOpt {
 		return intersection;
 	}
 
-	private static void buildMap(List<LongArrayList> otherPLI,
+	private static void buildMap(List<List<Long>> otherPLI,
 			Long2LongOpenHashMap hashedPLI, Map<LongPair, LongArrayList> map) {
 		int uniqueValueCount = 0;
-		for (LongArrayList sameValues : otherPLI) {
+		for (List<Long> sameValues : otherPLI) {
 			for (long rowIndex : sameValues) {
 				if (hashedPLI.containsKey(rowIndex)) {
 					LongPair pair = new LongPair(uniqueValueCount,
@@ -389,10 +389,10 @@ public class UccDiscoveryOpt {
 	 *
 	 * @return the pli as hash map
 	 */
-	private static Long2LongOpenHashMap asHashMap(List<LongArrayList> clusters) {
+	private static Long2LongOpenHashMap asHashMap(List<List<Long>> clusters) {
 		Long2LongOpenHashMap hashedPLI = new Long2LongOpenHashMap(clusters.size());
 		int uniqueValueCount = 0;
-		for (LongArrayList sameValues : clusters) {
+		for (List<Long> sameValues : clusters) {
 			for (long rowIndex : sameValues) {
 				hashedPLI.put(rowIndex, uniqueValueCount);
 			}
@@ -428,30 +428,30 @@ public class UccDiscoveryOpt {
 		return false;
 	}
 
-	private static JavaPairRDD<BitSet, List<LongArrayList>> createPLIs(
+	private static JavaPairRDD<BitSet, List<List<Long>>> createPLIs(
 			JavaRDD<Cell> cellValues) {
-		LongArrayList dummy = new LongArrayList();
-		List<LongArrayList> dummy2 = new ArrayList<LongArrayList>();
+	    List<Long> dummy = new ArrayList<Long>();
+		List<List<Long>> dummy2 = new ArrayList<List<Long>>();
 		
 		return cellValues
 				.mapToPair(
-						new PairFunction<Cell, Cell, LongArrayList>() {
+						new PairFunction<Cell, Cell, List<Long>>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public Tuple2<Cell, LongArrayList> call(Cell t)
+							public Tuple2<Cell, List<Long>> call(Cell t)
 									throws Exception {
 								LongArrayList rowIndex = new LongArrayList();
 								rowIndex.add(t.rowIndex);
-								return new Tuple2<Cell, LongArrayList>(
+								return new Tuple2<Cell, List<Long>>(
 										t, rowIndex);
 							}
 						})
-						.foldByKey(dummy, new Function2<LongArrayList, LongArrayList, LongArrayList>() {
+						.foldByKey(dummy, new Function2<List<Long>, List<Long>, List<Long>>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public LongArrayList call(LongArrayList v1, LongArrayList v2)
+							public List<Long> call(List<Long> v1, List<Long> v2)
 									throws Exception {
 								v1.addAll(v2);
 								return v1;
@@ -468,36 +468,36 @@ public class UccDiscoveryOpt {
 //								return v1;
 //							}
 //						})
-				.filter(new Function<Tuple2<Cell, LongArrayList>, Boolean>() {
+				.filter(new Function<Tuple2<Cell, List<Long>>, Boolean>() {
 					private static final long serialVersionUID = 1L;
 
 					@Override
 					public Boolean call(
-							Tuple2<Cell, LongArrayList> v1)
+							Tuple2<Cell, List<Long>> v1)
 							throws Exception {
 						return v1._2.size() != 1;
 					}
 				})
 				.mapToPair(
-						new PairFunction<Tuple2<Cell, LongArrayList>, BitSet, List<LongArrayList>>() {
+						new PairFunction<Tuple2<Cell, List<Long>>, BitSet, List<List<Long>>>() {
 							private static final long serialVersionUID = 1L;
 
 							@Override
-							public Tuple2<BitSet, List<LongArrayList>> call(
-									Tuple2<Cell, LongArrayList> v1)
+							public Tuple2<BitSet, List<List<Long>>> call(
+									Tuple2<Cell, List<Long>> v1)
 									throws Exception {
-								List<LongArrayList> listOfRedundantValueLists = new ArrayList<LongArrayList>();
+								List<List<Long>> listOfRedundantValueLists = new ArrayList<List<Long>>();
 								listOfRedundantValueLists.add(v1._2);
 								
-								return new Tuple2<BitSet, List<LongArrayList>>(
+								return new Tuple2<BitSet, List<List<Long>>>(
 										v1._1.columnIndex,
 										listOfRedundantValueLists);
 							}
-						}).foldByKey(dummy2, new Function2<List<LongArrayList>, List<LongArrayList>, List<LongArrayList>>() {
+						}).foldByKey(dummy2, new Function2<List<List<Long>>, List<List<Long>>, List<List<Long>>>() {
 							
 							@Override
-							public List<LongArrayList> call(List<LongArrayList> v1,
-									List<LongArrayList> v2) throws Exception {
+							public List<List<Long>> call(List<List<Long>> v1,
+									List<List<Long>> v2) throws Exception {
 								v1.addAll(v2);
 								return v1;
 							}

@@ -138,9 +138,7 @@ public class UccDiscoveryOpt {
 			currentLevel++;
 
 			// generate candidates
-            System.out.println("candidates for round before: " + currentCandidates.collect());
 			JavaRDD<BitSet> candidates = generateCandidates(currentCandidates, localMinUcc);
-			System.out.println("candidates for current round: " + candidates.collect());
 			JavaPairRDD<BitSet, Boolean> intersectedPLIs = generateNextLevelPLIs(
 			        pliHashMap, candidates, NUM_OF_NODES);
 			// intersectedPLIs.cache(); TODO: caching?

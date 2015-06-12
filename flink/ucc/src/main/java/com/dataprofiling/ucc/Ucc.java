@@ -1,13 +1,28 @@
 package com.dataprofiling.ucc;
 
-import com.dataprofiling.ucc.functions.CreateCells;
+import java.util.BitSet;
+import java.util.List;
 
+import com.dataprofiling.ucc.functions.CreateCells;
+import com.dataprofiling.ucc.functions.CreateLines;
+import com.dataprofiling.ucc.functions.ReduceCells;
+import com.dataprofiling.ucc.functions.ReduceColumnIndices;
+
+import org.apache.flink.api.common.functions.GroupCombineFunction;
+import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.aggregation.AggregationFunction;
+import org.apache.flink.api.java.aggregation.Aggregations;
 import org.apache.flink.api.java.io.RemoteCollectorConsumer;
 import org.apache.flink.api.java.io.RemoteCollectorImpl;
 import org.apache.flink.api.java.operators.DataSource;
+import org.apache.flink.api.java.operators.GroupCombineOperator;
+import org.apache.flink.api.java.operators.GroupReduceOperator;
+import org.apache.flink.api.java.operators.Keys;
+import org.apache.flink.api.java.operators.UnsortedGrouping;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.util.Collector;
 
 /**
  * Distributed UCC Discovery on Flink.
@@ -34,15 +49,21 @@ public class Ucc {
 
         // Read and parse the input file.
         String inputPath = this.parameters.inputFile;
+        DataSource<String> file = env.readTextFile(inputPath).name("Load " + inputPath);
+        DataSet<String> lines = file.flatMap(new CreateLines("\r")).name("split file");
+        DataSet<Tuple2<Cell, long[]>> cells = lines.flatMap(new CreateCells(',', env.getParallelism(), 0)).name(
+                "Split line, Parse " + inputPath);
 
-        DataSource<String> lines = env.readTextFile(inputPath).name(
-                "Load " + inputPath);
-
-        DataSet<Tuple2<long[], String>> cells = lines.flatMap(
-                new CreateCells(',', env.getParallelism(), 0)).name("Parse " + inputPath);
-
+        // Create PLIs for single columns // TODO: no column Index
+        DataSet<Tuple2<Cell, long[]>> b = cells.groupBy(0).getDataSet();
+        System.out.println("CELLS " + b.collect());
         
-        collectAndPrintUccs(cells);
+        DataSet<Tuple2<Candidate, long[]>> a = cells.combineGroup(new ReduceCells());
+        //.reduceGroup(new ReduceCells()).name("Reduce cells");
+       // DataSet<Tuple2<Candidate, long[]>> singleColumnPLIs = a.groupBy(0).reduceGroup(new ReduceColumnIndices()).name("Reduce column indices");
+        
+        //collectAndPrintUccs2(cells);
+        collectAndPrintUccs(a);
         // Trigger the job execution and measure the exeuction time.
         long startTime = System.currentTimeMillis();
         try {
@@ -51,8 +72,7 @@ public class Ucc {
             RemoteCollectorImpl.shutdownAll();
         }
         long endTime = System.currentTimeMillis();
-        System.out.format("Exection finished after %.3f s.\n",
-                (endTime - startTime) / 1000d);
+        System.out.format("Exection finished after %.3f s.\n", (endTime - startTime) / 1000d);
     }
 
     /**
@@ -86,14 +106,25 @@ public class Ucc {
 
         return executionEnvironment;
     }
-    
-    private void collectAndPrintUccs(DataSet<Tuple2<long[], String>> cells) {
-        RemoteCollectorImpl.collectLocal(cells, new RemoteCollectorConsumer<Tuple2<long[], String>>() {
+
+    private void collectAndPrintUccs(DataSet<Tuple2<Candidate, long[]>> a) {
+        RemoteCollectorImpl.collectLocal(a, new RemoteCollectorConsumer<Tuple2<Candidate, long[]>>() {
             @Override
-            public void collect(Tuple2<long[], String> cells) {
-                for (long referencedAttributeIndex : cells.f0) {
-                    System.out.format("%s < %s\n", referencedAttributeIndex, cells.f1);
+            public void collect(Tuple2<Candidate, long[]> cells) {
+                String pli = "[";
+                for (long referencedAttributeIndex : cells.f1) {
+                    pli += referencedAttributeIndex +", ";
                 }
+                System.out.format("%s < %s\n", cells.f0, pli);
+            }
+        });
+    }
+    
+    private void collectAndPrintUccs2(DataSet<Tuple2<Cell, long[]>> cells) {
+        RemoteCollectorImpl.collectLocal(cells, new RemoteCollectorConsumer<Tuple2<Cell, long[]>>() {
+            @Override
+            public void collect(Tuple2<Cell, long[]> cells) {
+                    System.out.format("%s < %s\n", cells.f0.toString(), cells.f1[0]);
             }
         });
     }

@@ -268,23 +268,27 @@ public class UccDiscoveryOpt {
 	 */
 	private static JavaRDD<Cell> createCellValues(JavaRDD<String> file,
 			final String delimiter) {
-		return file.zipWithIndex().flatMap(
-		        new FlatMapFunction<Tuple2<String, Long>, Cell>(){
+		return file.flatMap(
+		        new FlatMapFunction<String, Cell>(){
 					private static final long serialVersionUID = 1L;
 
 					@Override
-					public Iterable<Cell> call(Tuple2<String, Long> t)
+					public Iterable<Cell> call(String t)
 							throws Exception {
-						String[] strValues = t._1.split(delimiter);
+						String[] strValues = t.split(delimiter);
 						int N = strValues.length;
 						List<Cell> Cells = new ArrayList<Cell>();
 						
-						//long rowIndex = (long) (Math.random() * Long.MAX_VALUE);
+						// like the birthday problem the probability of matching pairs:
+						//  (n(n-1)/2)/Long.MAX_VALUE
+						// e.g. n= 10.000 p=5.4*10^-12, n=10^6 p=5.4 * 10^-8, n=10^9 p=0.054
+						// most used table have less then 10^9 rows --> matching to rows is unlikely
+						long rowIndex = (long) (Math.random() * Long.MAX_VALUE);
 						
 						for (int i = 0; i < N; i++) {
 							BitSet bs = new BitSet(N);
 							bs.set(i);
-							Cells.add(new Cell(bs, t._2, strValues[i]));
+							Cells.add(new Cell(bs, rowIndex, strValues[i]));
 						}
 						return Cells;
 					}

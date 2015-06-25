@@ -1,13 +1,13 @@
 package com.dataprofiling.ucc.functions;
 
+import java.util.BitSet;
+
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
-import com.dataprofiling.ucc.Candidate;
-import com.dataprofiling.ucc.Cell;
 
-public class CreateCells extends RichFlatMapFunction<String, Tuple2<Cell, long[]>> {
+public class CreateCells extends RichFlatMapFunction<String, Tuple3<Long, String, long[]>> {
     private static final long serialVersionUID = 1L;
 
     private final int offset;
@@ -15,7 +15,7 @@ public class CreateCells extends RichFlatMapFunction<String, Tuple2<Cell, long[]
     
     private final String splitChar;
 
-    private final Tuple2<Cell, long[]> outputTuple = new Tuple2<Cell, long[]>(null, new long[1]);
+    private final Tuple3<Long, String, long[]> outputTuple = new Tuple3<Long, String, long[]>(new Long(0), "", new long[1]);
 
     /**
      * Creates a new instance of this function.
@@ -28,16 +28,17 @@ public class CreateCells extends RichFlatMapFunction<String, Tuple2<Cell, long[]
     }
 
     @Override
-    public void flatMap(String line, Collector<Tuple2<Cell, long[]>> out) throws Exception {
-        // TOFIX: gets whole file not only a line
+    public void flatMap(String line, Collector<Tuple3<Long, String, long[]>> out) throws Exception {
         String[] fields = line.split(this.splitChar);
         int workerID = getRuntimeContext().getIndexOfThisSubtask() + 1;
         int column = 0;
         for (String field : fields) {
-            this.outputTuple.f1[0] = offset * index + workerID;
-            Candidate bs = new Candidate(fields.length);
+            this.outputTuple.f2[0] = offset * index + workerID;
+            System.out.println("ROWID " + (offset * index + workerID));
+            BitSet bs = new BitSet(fields.length);
             bs.set(column);
-            this.outputTuple.f0 = new Cell(bs, field);
+            this.outputTuple.f0 = (long) column;
+            this.outputTuple.f1 = field;
             out.collect(this.outputTuple);
             column++;
         }

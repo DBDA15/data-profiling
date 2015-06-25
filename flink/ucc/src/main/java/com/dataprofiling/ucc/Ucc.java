@@ -7,13 +7,17 @@ import com.dataprofiling.ucc.functions.CreateCells;
 import com.dataprofiling.ucc.functions.CreateLines;
 import com.dataprofiling.ucc.functions.ReduceCells;
 import com.dataprofiling.ucc.functions.ReduceColumnIndices;
+import com.dataprofiling.ucc.functions.SkipCellValues;
 
+import org.apache.flink.api.common.functions.FilterFunction;
+import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupCombineFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.aggregation.AggregationFunction;
 import org.apache.flink.api.java.aggregation.Aggregations;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.io.RemoteCollectorConsumer;
 import org.apache.flink.api.java.io.RemoteCollectorImpl;
 import org.apache.flink.api.java.operators.DataSource;
@@ -22,6 +26,7 @@ import org.apache.flink.api.java.operators.GroupReduceOperator;
 import org.apache.flink.api.java.operators.Keys;
 import org.apache.flink.api.java.operators.UnsortedGrouping;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
 /**
@@ -51,19 +56,25 @@ public class Ucc {
         String inputPath = this.parameters.inputFile;
         DataSource<String> file = env.readTextFile(inputPath).name("Load " + inputPath);
         DataSet<String> lines = file.flatMap(new CreateLines("\r")).name("split file");
-        DataSet<Tuple2<Cell, long[]>> cells = lines.flatMap(new CreateCells(',', env.getParallelism(), 0)).name(
+        DataSet<Tuple3<Long, String, long[]>> cells = lines.flatMap(new CreateCells(',', env.getParallelism(), 0)).name(
                 "Split line, Parse " + inputPath);
 
-        // Create PLIs for single columns // TODO: no column Index
-        DataSet<Tuple2<Cell, long[]>> b = cells.groupBy(0).getDataSet();
-        System.out.println("CELLS " + b.collect());
         
-        DataSet<Tuple2<Candidate, long[]>> a = cells.combineGroup(new ReduceCells());
-        //.reduceGroup(new ReduceCells()).name("Reduce cells");
-       // DataSet<Tuple2<Candidate, long[]>> singleColumnPLIs = a.groupBy(0).reduceGroup(new ReduceColumnIndices()).name("Reduce column indices");
+        DataSet<Tuple3<Long, String, long[]>> a = cells.groupBy(0, 1).reduce(new ReduceCells()).name("Reduce cells to list of row indices")
+                .filter(new FilterFunction<Tuple3<Long, String, long[]>>() {
+                    private static final long serialVersionUID = 1L;
+                    @Override
+                    public boolean filter(Tuple3<Long, String, long[]> v1) throws Exception {
+                        return v1.f2.length != 1;
+                    }
+                }).name("filter single row indices");
         
-        //collectAndPrintUccs2(cells);
-        collectAndPrintUccs(a);
+        DataSet<Tuple2<Long, long[]>> c = a.flatMap(new SkipCellValues()).name("Skip cell values, keep candidate and list of row indices");
+        // 2, 1, 5, 3, 7, 8, 9 -> candidate has 2 "duplicates": 1 and 5 have same value, and 7, 8 and 9 have same value
+        DataSet<Tuple2<Long, long[]>> d = c.groupBy(0).reduce(new ReduceDuplicates()).name("ReduceByCandidates to list of dublicate");
+        // DataSet<Tuple2<Candidate, long[]>> singleColumnPLIs = a.groupBy(0).reduceGroup(new ReduceColumnIndices()).name("Reduce column indices");
+        
+        collectAndPrintUccs(d);
         // Trigger the job execution and measure the exeuction time.
         long startTime = System.currentTimeMillis();
         try {
@@ -107,10 +118,10 @@ public class Ucc {
         return executionEnvironment;
     }
 
-    private void collectAndPrintUccs(DataSet<Tuple2<Candidate, long[]>> a) {
-        RemoteCollectorImpl.collectLocal(a, new RemoteCollectorConsumer<Tuple2<Candidate, long[]>>() {
+    private void collectAndPrintUccs(DataSet<Tuple2<Long, long[]>> a) {
+        RemoteCollectorImpl.collectLocal(a, new RemoteCollectorConsumer<Tuple2<Long, long[]>>() {
             @Override
-            public void collect(Tuple2<Candidate, long[]> cells) {
+            public void collect(Tuple2<Long, long[]> cells) {
                 String pli = "[";
                 for (long referencedAttributeIndex : cells.f1) {
                     pli += referencedAttributeIndex +", ";

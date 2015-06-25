@@ -1,20 +1,22 @@
 package com.dataprofiling.ucc;
 
 import java.io.Serializable;
+import java.util.BitSet;
 
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
-public class Cell implements Comparable<Object> {
-    public Candidate columnIndex;
+public class Cell implements Comparable<Cell>, Serializable {
+    private static final long serialVersionUID = 1L;
+    public BitSet columnIndex;
     String value;
 
-    public Cell(Candidate column, String value) {
-        this.columnIndex = column;
+    public Cell(BitSet bs, String value) {
+        this.columnIndex = bs;
         this.value = value;
     }
 
     public Cell() {
-        this.columnIndex = new Candidate();
+        this.columnIndex = new BitSet();
         this.value = "This empty string should not appear";
     }
 
@@ -44,10 +46,7 @@ public class Cell implements Comparable<Object> {
     }
 
     @Override
-    public int compareTo(Object o) {
-        if (!(o instanceof Cell)) {
-            return -1;
-        }
+    public int compareTo(Cell o) {
         Cell cell = (Cell) o;
         if (cell.columnIndex.equals(this.columnIndex) && cell.value.equals(this.value)) {
             return 1;

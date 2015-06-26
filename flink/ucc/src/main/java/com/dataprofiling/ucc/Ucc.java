@@ -1,33 +1,18 @@
 package com.dataprofiling.ucc;
 
-import java.util.BitSet;
-import java.util.List;
+import org.apache.flink.api.common.functions.FilterFunction;
+import org.apache.flink.api.java.DataSet;
+import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.io.RemoteCollectorConsumer;
+import org.apache.flink.api.java.io.RemoteCollectorImpl;
+import org.apache.flink.api.java.operators.DataSource;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 
 import com.dataprofiling.ucc.functions.CreateCells;
 import com.dataprofiling.ucc.functions.CreateLines;
 import com.dataprofiling.ucc.functions.ReduceCells;
-import com.dataprofiling.ucc.functions.ReduceColumnIndices;
 import com.dataprofiling.ucc.functions.SkipCellValues;
-
-import org.apache.flink.api.common.functions.FilterFunction;
-import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.GroupCombineFunction;
-import org.apache.flink.api.common.functions.GroupReduceFunction;
-import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.aggregation.AggregationFunction;
-import org.apache.flink.api.java.aggregation.Aggregations;
-import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.io.RemoteCollectorConsumer;
-import org.apache.flink.api.java.io.RemoteCollectorImpl;
-import org.apache.flink.api.java.operators.DataSource;
-import org.apache.flink.api.java.operators.GroupCombineOperator;
-import org.apache.flink.api.java.operators.GroupReduceOperator;
-import org.apache.flink.api.java.operators.Keys;
-import org.apache.flink.api.java.operators.UnsortedGrouping;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.util.Collector;
 
 /**
  * Distributed UCC Discovery on Flink.
@@ -139,15 +124,6 @@ public class Ucc {
                     pli += referencedAttributeIndex +", ";
                 }
                 System.out.format("%s < %s\n", cells.f0, pli);
-            }
-        });
-    }
-    
-    private void collectAndPrintUccs2(DataSet<Tuple2<Cell, long[]>> cells) {
-        RemoteCollectorImpl.collectLocal(cells, new RemoteCollectorConsumer<Tuple2<Cell, long[]>>() {
-            @Override
-            public void collect(Tuple2<Cell, long[]> cells) {
-                    System.out.format("%s < %s\n", cells.f0.toString(), cells.f1[0]);
             }
         });
     }

@@ -75,6 +75,18 @@ public class Ucc {
         // DataSet<Tuple2<Candidate, long[]>> singleColumnPLIs = a.groupBy(0).reduceGroup(new ReduceColumnIndices()).name("Reduce column indices");
         
         collectAndPrintUccs(d);
+        
+        
+        // candidaten generien auf master
+        
+        
+        // candidaten auf nodes verteilen
+        // nodes checken minimale
+        
+        // master collect
+        
+        
+        
         // Trigger the job execution and measure the exeuction time.
         long startTime = System.currentTimeMillis();
         try {

@@ -2,10 +2,7 @@ package com.dataprofiling.ucc.functions;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-
-import com.dataprofiling.ucc.Cell;
 
 /**
  * input cell, rowIndex

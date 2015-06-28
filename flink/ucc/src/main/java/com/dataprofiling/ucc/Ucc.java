@@ -1,5 +1,11 @@
 package com.dataprofiling.ucc;
 
+import java.util.BitSet;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
@@ -11,8 +17,17 @@ import org.apache.flink.api.java.tuple.Tuple3;
 
 import com.dataprofiling.ucc.functions.CreateCells;
 import com.dataprofiling.ucc.functions.CreateLines;
+import com.dataprofiling.ucc.functions.FilterNonUniques;
+import com.dataprofiling.ucc.functions.FilterUniques;
+import com.dataprofiling.ucc.functions.GetCandidates;
+import com.dataprofiling.ucc.functions.MapToCandidates;
+import com.dataprofiling.ucc.functions.MapToInsectedPLIs;
+import com.dataprofiling.ucc.functions.MapToPrefix;
 import com.dataprofiling.ucc.functions.ReduceCells;
+import com.dataprofiling.ucc.functions.ReduceToPair;
+import com.dataprofiling.ucc.functions.RemoveBoolean;
 import com.dataprofiling.ucc.functions.SkipCellValues;
+import com.dataprofiling.ucc.helper.Bits;
 
 /**
  * Distributed UCC Discovery on Flink.
@@ -41,37 +56,70 @@ public class Ucc {
         String inputPath = this.parameters.inputFile;
         DataSource<String> file = env.readTextFile(inputPath).name("Load " + inputPath);
         DataSet<String> lines = file.flatMap(new CreateLines("\r")).name("split file");
-        DataSet<Tuple3<Long, String, long[]>> cells = lines.flatMap(new CreateCells(',', env.getParallelism(), 0)).name(
-                "Split line, Parse " + inputPath);
+        DataSet<Tuple3<Long, String, long[]>> cells = lines.flatMap(new CreateCells(',', env.getParallelism(), 0))
+                .name("Split line, Parse " + inputPath);
 
-        
-        DataSet<Tuple3<Long, String, long[]>> a = cells.groupBy(0, 1).reduce(new ReduceCells()).name("Reduce cells to list of row indices")
-                .filter(new FilterFunction<Tuple3<Long, String, long[]>>() {
+        // Create position list indices for single columns
+        DataSet<Tuple2<Long, long[]>> singleColumnPLIs = cells.groupBy(0, 1).reduce(new ReduceCells())
+                .name("Reduce cells to list of row indices").filter(new FilterFunction<Tuple3<Long, String, long[]>>() {
                     private static final long serialVersionUID = 1L;
+
                     @Override
                     public boolean filter(Tuple3<Long, String, long[]> v1) throws Exception {
                         return v1.f2.length != 1;
                     }
-                }).name("filter single row indices");
-        
-        DataSet<Tuple2<Long, long[]>> c = a.flatMap(new SkipCellValues()).name("Skip cell values, keep candidate and list of row indices");
-        // 2, 1, 5, 3, 7, 8, 9 -> candidate has 2 "duplicates": 1 and 5 have same value, and 7, 8 and 9 have same value
-        DataSet<Tuple2<Long, long[]>> d = c.groupBy(0).reduce(new ReduceDuplicates()).name("ReduceByCandidates to list of dublicate");
-        // DataSet<Tuple2<Candidate, long[]>> singleColumnPLIs = a.groupBy(0).reduceGroup(new ReduceColumnIndices()).name("Reduce column indices");
-        
-        collectAndPrintUccs(d);
-        
-        
-        // candidaten generien auf master
-        
-        
-        // candidaten auf nodes verteilen
-        // nodes checken minimale
-        
-        // master collect
-        
-        
-        
+                }).name("filter single row indices").flatMap(new SkipCellValues())
+                .name("Skip cell values, keep candidate and list of row indices")
+                // 2, 1, 5, 3, 7, 8, 9 -> candidate has 2 "duplicates": 1 and 5
+                // have same value, and 7, 8 and 9 have same value
+                .groupBy(0).reduce(new ReduceDuplicates()).name("ReduceByCandidates to list of dublicate");
+
+        // get current candidates from single column PLIs
+        DataSet<Long> currentCandidates = singleColumnPLIs.flatMap(new GetCandidates()).name(
+                "Map from PLI to candidate only");
+
+        // create min Ucc
+        Set<Long> minUCC = new HashSet<Long>();
+        List<Long> currentCandidateList = currentCandidates.collect();
+        int n = lines.first(1).collect().get(0).split(",").length;
+        for (int i = 0; i < n; i++) {
+            Long column = Bits.createLong(i, n);
+            if (!currentCandidateList.contains(column)) {
+                minUCC.add(column);
+            }
+        }
+
+        while (currentCandidates.count() > 1) {
+            // generate candidates using APRIORI algorithm
+            DataSet<Long> candidates = currentCandidates.flatMap(new MapToPrefix())
+                    .name("Candidate generation I: Map from candidate to pair: Prefix, Candidates").groupBy(0)
+                    .reduce(new ReduceToPair()).name("candidate generation II").flatMap(new MapToCandidates())
+                    .name("Candidate generation III: Map from (prefix, candidates) to candidates");
+
+            // TODO: to subset check here instead before adding to minUccs
+
+            // distribute single column PLIs using broadcast, alternative: copy
+            // using flatmap and then partioning
+            // create new PLIs on nodes
+            candidates.rebalance();
+            DataSet<Tuple2<Long, Boolean>> nextLevelPLI = candidates.flatMap(new MapToInsectedPLIs())
+                    .name("intersected").withBroadcastSet(singleColumnPLIs, "singleColumnPLIs");
+
+            // filter uniques
+            List<Long> newUniques = nextLevelPLI.filter(new FilterUniques()).name("filter uniques").flatMap(new RemoveBoolean()).collect();
+            for (Long newUnique : newUniques) {
+                if (!isSubsetUnique(newUnique, minUCC)){
+                    minUCC.add(newUnique);
+                }
+            }
+
+            currentCandidates = nextLevelPLI.filter(new FilterNonUniques()).name("filter non uniques").flatMap(new RemoveBoolean());
+            List<Long> a = currentCandidates.collect();
+            System.out.println(a);
+        }
+
+        print(minUCC);
+
         // Trigger the job execution and measure the exeuction time.
         long startTime = System.currentTimeMillis();
         try {
@@ -115,15 +163,46 @@ public class Ucc {
         return executionEnvironment;
     }
 
-    private void collectAndPrintUccs(DataSet<Tuple2<Long, long[]>> a) {
-        RemoteCollectorImpl.collectLocal(a, new RemoteCollectorConsumer<Tuple2<Long, long[]>>() {
+    /**
+     * Check if any of the minimal uniques is completely contained in the column
+     * combination. If so, a subset is already unique.
+     * 
+     * TODO: inefficient due to comparisons to all minimal uniques and due to
+     * convertion to BitSet
+     * 
+     * @param columnCombination
+     * @param minUCC
+     * @return true if columnCombination contains unique subset, false otherwise
+     */
+    private static boolean isSubsetUnique(Long columnCombinationL, Collection<Long> minUCC) {
+        BitSet columnCombination = Bits.convert(columnCombinationL);
+        for (Long bSetL : minUCC) {
+            BitSet bSet = Bits.convert(bSetL);
+            if (bSet.cardinality() > columnCombination.cardinality()) {
+                continue;
+            }
+            BitSet copy = (BitSet) bSet.clone();
+            copy.and(columnCombination);
+
+            if (copy.cardinality() == bSet.cardinality()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void print(Collection<Long> minUCCs) {
+        for (Long ucc : minUCCs) {
+            System.out.println(Bits.convert(ucc));
+        }
+        
+    }
+    
+    private void collectAndPrintUccs(DataSet<Tuple2<Long, Boolean>> a) {
+        RemoteCollectorImpl.collectLocal(a, new RemoteCollectorConsumer<Tuple2<Long, Boolean>>() {
             @Override
-            public void collect(Tuple2<Long, long[]> cells) {
-                String pli = "[";
-                for (long referencedAttributeIndex : cells.f1) {
-                    pli += referencedAttributeIndex +", ";
-                }
-                System.out.format("%s < %s\n", cells.f0, pli);
+            public void collect(Tuple2<Long, Boolean> cells) {
+                System.out.format("%s < %s\n", cells.f0, cells.f1);
             }
         });
     }

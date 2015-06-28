@@ -6,6 +6,8 @@ import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.util.Collector;
 
+import com.dataprofiling.ucc.helper.Bits;
+
 
 public class CreateCells extends RichFlatMapFunction<String, Tuple3<Long, String, long[]>> {
     private static final long serialVersionUID = 1L;
@@ -32,12 +34,9 @@ public class CreateCells extends RichFlatMapFunction<String, Tuple3<Long, String
         String[] fields = line.split(this.splitChar);
         int workerID = getRuntimeContext().getIndexOfThisSubtask() + 1;
         int column = 0;
+        this.outputTuple.f2[0] = offset * index + workerID;
         for (String field : fields) {
-            this.outputTuple.f2[0] = offset * index + workerID;
-            System.out.println("ROWID " + (offset * index + workerID));
-            BitSet bs = new BitSet(fields.length);
-            bs.set(column);
-            this.outputTuple.f0 = (long) column;
+            this.outputTuple.f0 = Bits.createLong(column, field.length());
             this.outputTuple.f1 = field;
             out.collect(this.outputTuple);
             column++;

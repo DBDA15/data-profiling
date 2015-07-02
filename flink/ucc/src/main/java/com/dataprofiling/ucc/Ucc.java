@@ -114,8 +114,6 @@ public class Ucc {
             }
 
             currentCandidates = nextLevelPLI.filter(new FilterNonUniques()).name("filter non uniques").flatMap(new RemoveBoolean());
-            List<Long> a = currentCandidates.collect();
-            System.out.println(a);
         }
 
         print(minUCC);
@@ -193,9 +191,9 @@ public class Ucc {
 
     private void print(Collection<Long> minUCCs) {
         for (Long ucc : minUCCs) {
-            System.out.println(Bits.convert(ucc));
+            System.out.print(Bits.convert(ucc));
         }
-        
+        System.out.println();
     }
     
     private void collectAndPrintUccs(DataSet<Tuple2<Long, Boolean>> a) {

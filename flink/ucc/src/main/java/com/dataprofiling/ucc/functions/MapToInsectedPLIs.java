@@ -29,8 +29,6 @@ public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Bo
 
     @Override
     public void flatMap(Long in, Collector<Tuple2<Long, Boolean>> out) throws Exception {
-        if (in == 770)
-            System.err.println();
         List<Long> plis = new ArrayList<Long>();
         long highestBit = (int) (Math.log(Long.highestOneBit(in)) / Math.log(2) + 1e-10);
         for (long i = 0; i < highestBit + 1; i++) {
@@ -61,17 +59,22 @@ public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Bo
             for (; i <= sizeIndex + sizeOfSameValue; i++) {
                 long rowIndex = onePLI[i];
 
+                List<Long> addValues = new ArrayList<Long>();
                 for (int j = 0; j < otherPLIs.size(); j++) {
-                    if (areNonUnique[j]) continue;
                     HashMap<Long, Long> otherPLI = otherPLIs.get(j);
                     List<Long> otherValueList = values.get(j);
                     
                     // find rowIndex in each other PLI
                     if (otherPLI.containsKey(rowIndex)) {
-                        if (otherValueList.contains(otherPLI.get(rowIndex))) {
+                        addValues.add(otherPLI.get(rowIndex));
+                    } // end if
+                } // end for
+                if (addValues.size() == otherPLIs.size()) {
+                    for (int j = 0; j < addValues.size(); j++) {
+                        if (values.get(j).contains(otherPLIs.get(j).get(rowIndex))) {
                             areNonUnique[j] = true;
                         } else {
-                            otherValueList.add(otherPLI.get(rowIndex));
+                            values.get(j).add(addValues.get(j));
                         }
                     }
                 }

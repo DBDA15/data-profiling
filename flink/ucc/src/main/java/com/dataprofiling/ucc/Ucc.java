@@ -49,6 +49,7 @@ public class Ucc {
     }
 
     private void run() throws Exception {
+        long startTime = System.currentTimeMillis();
         // Load the execution environment.
         final ExecutionEnvironment env = createExecutionEnvironment();
 
@@ -119,12 +120,12 @@ public class Ucc {
         print(minUCC);
 
         // Trigger the job execution and measure the exeuction time.
-        long startTime = System.currentTimeMillis();
-        try {
-            env.execute("UCC");
-        } finally {
-            RemoteCollectorImpl.shutdownAll();
-        }
+        // try {
+        // env.execute("UCC");
+        // } catch (RuntimeException e) {
+        // } finally {
+        // RemoteCollectorImpl.shutdownAll();
+        // }
         long endTime = System.currentTimeMillis();
         System.out.format("Exection finished after %.3f s.\n", (endTime - startTime) / 1000d);
     }

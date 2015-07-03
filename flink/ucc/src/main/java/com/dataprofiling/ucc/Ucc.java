@@ -103,18 +103,18 @@ public class Ucc {
             // using flatmap and then partioning
             // create new PLIs on nodes
             candidates.rebalance();
-            DataSet<Tuple2<Long, Boolean>> nextLevelPLI = candidates.flatMap(new MapToInsectedPLIs())
+            DataSet<Tuple2<Long, Boolean>> nextLevelPLI = candidates.map(new MapToInsectedPLIs())
                     .name("intersected").withBroadcastSet(singleColumnPLIs, "singleColumnPLIs");
 
             // filter uniques
-            List<Long> newUniques = nextLevelPLI.filter(new FilterUniques()).name("filter uniques").flatMap(new RemoveBoolean()).collect();
+            List<Long> newUniques = nextLevelPLI.filter(new FilterUniques()).name("filter uniques").map(new RemoveBoolean()).collect();
             for (Long newUnique : newUniques) {
                 if (!isSubsetUnique(newUnique, minUCC)){
                     minUCC.add(newUnique);
                 }
             }
 
-            currentCandidates = nextLevelPLI.filter(new FilterNonUniques()).name("filter non uniques").flatMap(new RemoveBoolean());
+            currentCandidates = nextLevelPLI.filter(new FilterNonUniques()).name("filter non uniques").map(new RemoveBoolean());
         }
 
         print(minUCC);

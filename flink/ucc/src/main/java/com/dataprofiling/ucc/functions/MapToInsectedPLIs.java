@@ -7,13 +7,14 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.util.Collector;
 
 import com.dataprofiling.ucc.helper.Bits;
 
-public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Boolean>> {
+public class MapToInsectedPLIs extends RichMapFunction<Long, Tuple2<Long, Boolean>> {
     private static final long serialVersionUID = -5257555221859734116L;
     private HashMap<Long, long[]> pliHashMap = new HashMap<Long, long[]>();
 
@@ -26,9 +27,9 @@ public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Bo
             pliHashMap.put(tuple2.f0, tuple2.f1);
         }
     }
-
+    
     @Override
-    public void flatMap(Long in, Collector<Tuple2<Long, Boolean>> out) throws Exception {
+    public Tuple2<Long, Boolean> map(Long in) throws Exception {
         List<Long> plis = new ArrayList<Long>();
         long highestBit = (int) (Math.log(Long.highestOneBit(in)) / Math.log(2) + 1e-10);
         for (long i = 0; i < highestBit + 1; i++) {
@@ -62,8 +63,6 @@ public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Bo
                 List<Long> addValues = new ArrayList<Long>();
                 for (int j = 0; j < otherPLIs.size(); j++) {
                     HashMap<Long, Long> otherPLI = otherPLIs.get(j);
-                    List<Long> otherValueList = values.get(j);
-                    
                     // find rowIndex in each other PLI
                     if (otherPLI.containsKey(rowIndex)) {
                         addValues.add(otherPLI.get(rowIndex));
@@ -88,12 +87,11 @@ public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Bo
                     break;
             }
             if (result) {
-                out.collect(new Tuple2<Long, Boolean>(in, true));
-                return;
+                return new Tuple2<Long, Boolean>(in, true);
             }
         }
 
-        out.collect(new Tuple2<Long, Boolean>(in, false));
+        return new Tuple2<Long, Boolean>(in, false);
     }
 
     private HashMap<Long, Long> buildHashMap(long[] pli) {
@@ -110,4 +108,5 @@ public class MapToInsectedPLIs extends RichFlatMapFunction<Long, Tuple2<Long, Bo
         }
         return otherPli;
     }
+
 }

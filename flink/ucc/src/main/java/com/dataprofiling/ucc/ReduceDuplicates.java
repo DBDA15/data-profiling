@@ -1,7 +1,5 @@
 package com.dataprofiling.ucc;
 
-import java.util.BitSet;
-
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple2;

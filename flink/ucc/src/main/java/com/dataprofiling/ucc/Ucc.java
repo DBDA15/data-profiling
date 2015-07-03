@@ -1,6 +1,5 @@
 package com.dataprofiling.ucc;
 
-import java.util.BitSet;
 import java.util.Collection;
 import java.util.List;
 
@@ -13,14 +12,11 @@ import org.apache.flink.api.java.tuple.Tuple3;
 
 import com.dataprofiling.ucc.functions.CreateCells;
 import com.dataprofiling.ucc.functions.CreateLines;
-import com.dataprofiling.ucc.functions.FilterCandidates;
 import com.dataprofiling.ucc.functions.FilterUCCs;
-import com.dataprofiling.ucc.functions.MapToCandidates;
+import com.dataprofiling.ucc.functions.GenerateCandidates;
 import com.dataprofiling.ucc.functions.MapToCombined;
 import com.dataprofiling.ucc.functions.MapToInsectedPLIs;
-import com.dataprofiling.ucc.functions.MapToPrefix;
 import com.dataprofiling.ucc.functions.ReduceCells;
-import com.dataprofiling.ucc.functions.ReduceToPair;
 import com.dataprofiling.ucc.functions.RemoveBoolean;
 import com.dataprofiling.ucc.functions.SkipCellValues;
 import com.dataprofiling.ucc.helper.Bits;
@@ -67,16 +63,21 @@ public class Ucc {
 
         // combine uccs and candidates to one dataset with boolean flag, which is true when column is candidate
         DataSet<Tuple2<Long, Boolean>> combined = singleColumnPLIs.map(new MapToCombined()).name("map to combined");
-        IterativeDataSet<Tuple2<Long, Boolean>> inital = combined.iterate(10);
+        IterativeDataSet<Tuple2<Long, Boolean>> inital = combined.iterate(Integer.MAX_VALUE);
 
-        // generate candidates using APRIORI algorithm
-        DataSet<Long> candidates = inital.filter(new FilterCandidates()).map(new RemoveBoolean()).flatMap(new MapToPrefix())
-                .name("Candidate generation I: Map from candidate to pair: Prefix, Candidates").groupBy(0)
-                .reduce(new ReduceToPair()).name("candidate generation II").flatMap(new MapToCandidates())
-                .name("Candidate generation III: Map from (prefix, candidates) to candidates");
+        // generate candidates using APRIORI algorithm - old distributed variant without subsetcheck
+        // DataSet<Long> candidates = inital.filter(new
+        // FilterCandidates()).map(new RemoveBoolean()).flatMap(new
+        // MapToPrefix())
+        // .name("Candidate generation I: Map from candidate to pair: Prefix, Candidates").groupBy(0)
+        // .reduce(new
+        // ReduceToPair()).name("candidate generation II").flatMap(new
+        // MapToCandidates())
+        // .name("Candidate generation III: Map from (prefix, candidates) to candidates");
 
-        // TODO: to subset check here instead before adding to minUccs
-
+        // generate candidates using APRIORI algorithm using reduceGroup - not distributed
+        DataSet<Long> candidates = inital.reduceGroup(new GenerateCandidates());
+        
         // distribute singleColumnPlis using broadcast (OR using flatmap and then partioning)
         // create new PLIs on nodes
         candidates = candidates.rebalance();
@@ -85,7 +86,7 @@ public class Ucc {
 
         // nextLevelPLI is combination of next level candidates and new minUccs therefore only have to add old minUccs
         DataSet<Tuple2<Long, Boolean>> iteration = nextLevelPLI.union(inital.filter(new FilterUCCs()));
-        DataSet<Tuple2<Long, Boolean>> result = inital.closeWith(iteration);
+        DataSet<Tuple2<Long, Boolean>> result = inital.closeWith(iteration, candidates);
 
         List<Long> uccs = result.filter(new FilterUCCs()).map(new RemoveBoolean()).collect();
         long endTime = System.currentTimeMillis();
@@ -123,34 +124,6 @@ public class Ucc {
         }
 
         return executionEnvironment;
-    }
-
-    /**
-     * Check if any of the minimal uniques is completely contained in the column
-     * combination. If so, a subset is already unique.
-     * 
-     * TODO: inefficient due to comparisons to all minimal uniques and due to
-     * convertion to BitSet
-     * 
-     * @param columnCombination
-     * @param minUCC
-     * @return true if columnCombination contains unique subset, false otherwise
-     */
-    private static boolean isSubsetUnique(Long columnCombinationL, Collection<Long> minUCC) {
-        BitSet columnCombination = Bits.convert(columnCombinationL);
-        for (Long bSetL : minUCC) {
-            BitSet bSet = Bits.convert(bSetL);
-            if (bSet.cardinality() > columnCombination.cardinality()) {
-                continue;
-            }
-            BitSet copy = (BitSet) bSet.clone();
-            copy.and(columnCombination);
-
-            if (copy.cardinality() == bSet.cardinality()) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private void print(Collection<Long> minUCCs) {

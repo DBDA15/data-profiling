@@ -1,11 +1,11 @@
 package com.dataprofiling.ucc.functions;
 
 import org.apache.commons.lang.ArrayUtils;
-import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 
-public class SkipCellValues extends RichMapFunction<Tuple3<Long, String, long[]>, Tuple2<Long, long[]>> {
+public class SkipCellValues implements MapFunction<Tuple3<Long, String, long[]>, Tuple2<Long, long[]>> {
     private static final long serialVersionUID = 315443475189842114L;
 
     @Override

@@ -4,11 +4,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.api.java.function.Function;
 
 import scala.Tuple2;
 
-public class MapToIntersectedPLI implements PairFunction<Long, Long, Boolean> {
+public class MapToIntersectedPLI implements Function<Long, Tuple2<Long, Boolean>> {
     private static final long serialVersionUID = 2149149028323431945L;
     private HashMap<Long, long[]> pliHashMap = new HashMap<Long, long[]>();
 

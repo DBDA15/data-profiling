@@ -20,14 +20,12 @@ import com.dataprofiling.ucc.functions.Bits;
 import com.dataprofiling.ucc.functions.FilterNonUCC;
 import com.dataprofiling.ucc.functions.FilterNonUniques;
 import com.dataprofiling.ucc.functions.FilterUCC;
-import com.dataprofiling.ucc.functions.FilterUniques;
-import com.dataprofiling.ucc.functions.MapToCandidates;
-import com.dataprofiling.ucc.functions.MapToIndex;
+import com.dataprofiling.ucc.functions.GenerateCandidates;
+import com.dataprofiling.ucc.functions.GroupToTrue;
+import com.dataprofiling.ucc.functions.MapToCombined;
 import com.dataprofiling.ucc.functions.MapToIntersectedPLI;
-import com.dataprofiling.ucc.functions.MapToPrefix;
 import com.dataprofiling.ucc.functions.ReduceDuplicates;
 import com.dataprofiling.ucc.functions.RemoveBoolean;
-import com.dataprofiling.ucc.functions.RemoveLongArray;
 import com.dataprofiling.ucc.functions.SkipCellValues;
 
 /**
@@ -66,18 +64,14 @@ public class UccSpark {
         Broadcast<String> bcDelimiter = spark.broadcast(delimiter);
         String localDelimiter = bcDelimiter.value();
 
-        // get PLI for non unique columns
+        // create PLIs for all single columns
         JavaPairRDD<Cell, long[]> cellValues = createCellValues(file, localDelimiter);
         JavaPairRDD<Long, long[]> plisSingleColumns = createPLIs(cellValues);
 
-        // save minUccs as RDD
-        JavaRDD<Long> minUcc = plisSingleColumns.filter(new FilterUniques()).map(new RemoveLongArray());
+        // combine UCCs and candidates, to skip broadcasting UCCs every round
+        JavaRDD<Tuple2<Long, Boolean>> initial = plisSingleColumns.map(new MapToCombined()).cache();
+        plisSingleColumns = plisSingleColumns.filter(new FilterNonUniques());
 
-        JavaPairRDD<Long, long[]> currentLevelPLIs = plisSingleColumns.filter(new FilterNonUniques()).cache();
-        Broadcast<JavaRDD<Long>> broadcastMinUCC = spark.broadcast(minUcc);
-        List<Long> localMinUcc = broadcastMinUCC.value().collect();
-
-        boolean done = false;
         int currentLevel = 0;
 
         // save singleColumPLIs and broadcast it
@@ -91,42 +85,26 @@ public class UccSpark {
             pliHashMap.put(ele._1, ele._2);
         }
 
-        JavaRDD<Long> currentCandidates = currentLevelPLIs.map(new MapToIndex()).cache();
-
-        while (!done && currentLevel < levelsToCheck) {
+        while (!initial.filter(new FilterNonUCC()).isEmpty() && currentLevel < levelsToCheck) {
             long startLoop = System.currentTimeMillis();
             currentLevel++;
 
-            // generate candidates
-            JavaRDD<Long> candidates = generateCandidates(currentCandidates, localMinUcc);
-            candidates.cache();
-            currentCandidates.unpersist();
-            
-            JavaPairRDD<Long, Boolean> intersectedPLIs = generateNextLevelPLIs(pliHashMap, candidates,
-                    spark.defaultParallelism());
-            // intersectedPLIs.cache(); TOFIX: caching?
+            JavaRDD<Long> candidates = initial.groupBy(new GroupToTrue()).flatMap(new GenerateCandidates());
+            candidates = candidates.repartition(spark.defaultParallelism());            
+            JavaRDD<Tuple2<Long, Boolean>> intersectedPLIs = candidates.map(new MapToIntersectedPLI(pliHashMap));
 
-            JavaRDD<Long> additionalMinUcc = intersectedPLIs.filter(new FilterUCC()).map(new RemoveBoolean());
+            JavaRDD<Tuple2<Long, Boolean>> initialUncached = intersectedPLIs.union(initial.filter(new FilterUCC()));
+            initial.unpersist();
+            initial = initialUncached.cache();
 
-            minUcc.union(additionalMinUcc);
-
-            JavaRDD<Long> nonUniqueCombinations = intersectedPLIs.filter(new FilterNonUCC()).map(new RemoveBoolean());
-
-            if (nonUniqueCombinations.isEmpty()) {
-                // abort processing once there are no new candidates to check
-                done = true;
-                break;
-            }
-            
-            // prepare new round of candidate generation
-            currentCandidates = nonUniqueCombinations;
             System.out.println("Finished another iteration: " + (System.currentTimeMillis() - startLoop) + "ms");
         }
 
         long end = System.currentTimeMillis();
         System.out.println("Runtime: " + (end - start) / 1000 + "s");
         System.out.print("Minimal Unique Column Combinations: ");
-        print(minUcc.collect());
+        // minUCC = combined / ninUniqueCombination
+        print(initial.filter(new FilterUCC()).map(new RemoveBoolean()).collect());
         spark.close();
     }
 
@@ -135,10 +113,6 @@ public class UccSpark {
             System.out.print(Bits.convert(ucc));
         }
         System.out.println();
-    }
-
-    private static JavaRDD<Long> generateCandidates(JavaRDD<Long> currentCandidates, final List<Long> localMinUcc) {
-        return currentCandidates.mapToPair(new MapToPrefix()).groupByKey().flatMap(new MapToCandidates(localMinUcc));
     }
 
     private static JavaSparkContext createSparkContext() {
@@ -160,7 +134,7 @@ public class UccSpark {
         return file.flatMap(new FlatMapFunction<String, Tuple2<Cell, long[]>>() {
             private static final long serialVersionUID = 1L;
             int index = 0;
-            
+
             @Override
             public Iterable<Tuple2<Cell, long[]>> call(String t) throws Exception {
                 String[] strValues = t.split(delimiter);
@@ -173,7 +147,8 @@ public class UccSpark {
                 // p=0.054
                 // most used table have less then 10^9 rows --> matching to rows
                 // is unlikely
-                long rowIndex = index;//(long) (Math.random() * Long.MAX_VALUE);
+                long rowIndex = index;// (long) (Math.random() *
+                                      // Long.MAX_VALUE);
                 index++;
                 for (int i = 0; i < N; i++) {
                     long[] rowIndexA = { rowIndex };
@@ -190,25 +165,6 @@ public class UccSpark {
                 return t;
             }
         });
-    }
-
-    /**
-     * This method implements the apriori algorithm. It uses the
-     * currentLevelPLIs to produce new tuples where the key is the input key
-     * reduces by one character. The value of the new tuple is the complete old
-     * tuple. Then all tuples are grouped by the key. In the end the method
-     * combines all combinations and intersects the PLIs.
-     * 
-     * @param pliHashMap
-     * @param candidates
-     * @param nodes
-     *            number of partions
-     * @return true - unique, false -> non -unique
-     */
-    private static JavaPairRDD<Long, Boolean> generateNextLevelPLIs(final HashMap<Long, long[]> pliHashMap,
-            final JavaRDD<Long> candidates, int nodes) {
-        candidates.repartition(nodes);
-        return candidates.mapToPair(new MapToIntersectedPLI(pliHashMap));
     }
 
     /**

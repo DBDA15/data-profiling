@@ -37,7 +37,10 @@ public class Parameters {
     public List<String> jars = null;
 
     @Parameter(names = "--executor", description = "<host name>:<port> of the Flink cluster")
-    public String executor = null;
+    public String executor = null;    
+
+    @Parameter(names = "--delimiter", description = "delimiter")
+    public String delimiter = ",";
 
     @Parameter(names = "--distinct-attribute-groups", description = "whether to use only distinct attribute groups")
     public boolean isUseDistinctAttributeGroups = false;

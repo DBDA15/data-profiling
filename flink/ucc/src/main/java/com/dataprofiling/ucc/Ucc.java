@@ -49,7 +49,7 @@ public class Ucc {
         String inputPath = this.parameters.inputFile;
         DataSource<String> file = env.readTextFile(inputPath).name("Load " + inputPath);
         DataSet<String> lines = file.flatMap(new CreateLines("\r")).name("split file");
-        DataSet<Tuple3<Long, String, long[]>> cells = lines.flatMap(new CreateCells(',', env.getParallelism(), 0))
+        DataSet<Tuple3<Long, String, long[]>> cells = lines.flatMap(new CreateCells(this.parameters.delimiter.charAt(0), env.getParallelism(), 0))
                 .name("Split line, Parse " + inputPath);
 
         // Create position list indices for single columns

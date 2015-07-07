@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 import org.apache.spark.api.java.function.FlatMapFunction;
 
@@ -12,9 +11,9 @@ import scala.Tuple2;
 
 public class MapToCandidates implements FlatMapFunction<Tuple2<Long, Iterable<long[]>>, Long> {
         private static final long serialVersionUID = 2996101042290089153L;
-        private Set<Long> minUCC;
+        private List<Long> minUCC;
 
-        public MapToCandidates(Set<Long> localMinUcc) {
+        public MapToCandidates(List<Long> localMinUcc) {
             this.minUCC = localMinUcc;
         }
 
@@ -60,7 +59,7 @@ public class MapToCandidates implements FlatMapFunction<Tuple2<Long, Iterable<lo
          * @param minUCC
          * @return true if columnCombination contains unique subset, false otherwise
          */
-        private static boolean isSubsetUnique(Long columnCombinationL, Set<Long> minUCC) {
+        private static boolean isSubsetUnique(Long columnCombinationL, List<Long> minUCC) {
             BitSet columnCombination = Bits.convert(columnCombinationL);
             for (Long bSetL : minUCC) {
                 BitSet bSet = Bits.convert(bSetL);

@@ -2,9 +2,7 @@ package com.dataprofiling.ucc;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.spark.SparkConf;
@@ -12,7 +10,6 @@ import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.broadcast.Broadcast;
@@ -21,13 +18,16 @@ import scala.Tuple2;
 
 import com.dataprofiling.ucc.functions.Bits;
 import com.dataprofiling.ucc.functions.FilterNonUCC;
+import com.dataprofiling.ucc.functions.FilterNonUniques;
 import com.dataprofiling.ucc.functions.FilterUCC;
+import com.dataprofiling.ucc.functions.FilterUniques;
 import com.dataprofiling.ucc.functions.MapToCandidates;
 import com.dataprofiling.ucc.functions.MapToIndex;
 import com.dataprofiling.ucc.functions.MapToIntersectedPLI;
 import com.dataprofiling.ucc.functions.MapToPrefix;
 import com.dataprofiling.ucc.functions.ReduceDuplicates;
 import com.dataprofiling.ucc.functions.RemoveBoolean;
+import com.dataprofiling.ucc.functions.RemoveLongArray;
 import com.dataprofiling.ucc.functions.SkipCellValues;
 
 /**
@@ -59,9 +59,6 @@ public class UccSpark {
         final String inputFile = this.parameters.inputFile;
         String delimiter = this.parameters.delimiter;
 
-        // encode column combinations as bit sets
-        Set<Long> minUcc = new HashSet<>();
-
         JavaSparkContext spark = createSparkContext();
         JavaRDD<String> file = spark.textFile(inputFile);
 
@@ -69,29 +66,16 @@ public class UccSpark {
         Broadcast<String> bcDelimiter = spark.broadcast(delimiter);
         String localDelimiter = bcDelimiter.value();
 
-        // TOFIX: create minUccs in parallel
-        String firstLine = file.first();
-        int n = firstLine.split(delimiter).length;
-
-        for (int i = 0; i < n; i++) {
-            Long candidate = Bits.createLong(i, n);
-            minUcc.add(candidate);
-        }
-        System.out.println("MinuCC works? : " + minUcc);
-
         // get PLI for non unique columns
         JavaPairRDD<Cell, long[]> cellValues = createCellValues(file, localDelimiter);
         JavaPairRDD<Long, long[]> plisSingleColumns = createPLIs(cellValues);
 
-        // TOFIX: save minUccs as RDD
-        List<Tuple2<Long, long[]>> nonUniques = plisSingleColumns.collect();
-        for (Tuple2<Long, long[]> nonUnique : nonUniques) {
-            minUcc.remove(nonUnique._1);
-        }
+        // save minUccs as RDD
+        JavaRDD<Long> minUcc = plisSingleColumns.filter(new FilterUniques()).map(new RemoveLongArray());
 
-        JavaPairRDD<Long, long[]> currentLevelPLIs = plisSingleColumns.cache();
-        Broadcast<Set<Long>> broadcastMinUCC = spark.broadcast(minUcc);
-        Set<Long> localMinUcc = broadcastMinUCC.value();
+        JavaPairRDD<Long, long[]> currentLevelPLIs = plisSingleColumns.filter(new FilterNonUniques()).cache();
+        Broadcast<JavaRDD<Long>> broadcastMinUCC = spark.broadcast(minUcc);
+        List<Long> localMinUcc = broadcastMinUCC.value().collect();
 
         boolean done = false;
         int currentLevel = 0;
@@ -122,9 +106,9 @@ public class UccSpark {
                     spark.defaultParallelism());
             // intersectedPLIs.cache(); TOFIX: caching?
 
-            List<Long> additionalMinUcc = intersectedPLIs.filter(new FilterUCC()).map(new RemoveBoolean()).collect();
+            JavaRDD<Long> additionalMinUcc = intersectedPLIs.filter(new FilterUCC()).map(new RemoveBoolean());
 
-            minUcc.addAll(additionalMinUcc);
+            minUcc.union(additionalMinUcc);
 
             JavaRDD<Long> nonUniqueCombinations = intersectedPLIs.filter(new FilterNonUCC()).map(new RemoveBoolean());
 
@@ -142,18 +126,18 @@ public class UccSpark {
         long end = System.currentTimeMillis();
         System.out.println("Runtime: " + (end - start) / 1000 + "s");
         System.out.print("Minimal Unique Column Combinations: ");
-        print(minUcc);
+        print(minUcc.collect());
         spark.close();
     }
 
-    private void print(Set<Long> minUcc) {
-        for (Long ucc : minUcc) {
+    private void print(List<Long> list) {
+        for (Long ucc : list) {
             System.out.print(Bits.convert(ucc));
         }
         System.out.println();
     }
 
-    private static JavaRDD<Long> generateCandidates(JavaRDD<Long> currentCandidates, final Set<Long> localMinUcc) {
+    private static JavaRDD<Long> generateCandidates(JavaRDD<Long> currentCandidates, final List<Long> localMinUcc) {
         return currentCandidates.mapToPair(new MapToPrefix()).groupByKey().flatMap(new MapToCandidates(localMinUcc));
     }
 
@@ -242,14 +226,7 @@ public class UccSpark {
             public long[] call(long[] v1, long[] v2) throws Exception {
                 return ArrayUtils.addAll(v1, v2);
             }
-        }).mapToPair(new SkipCellValues()).reduceByKey(new ReduceDuplicates()).filter(new Function<Tuple2<Long,long[]>, Boolean>() {
-            private static final long serialVersionUID = 1L;
-
-            @Override
-            public Boolean call(Tuple2<Long, long[]> v1) throws Exception {
-                return v1._2.length > 0;
-            }
-        });
+        }).mapToPair(new SkipCellValues()).reduceByKey(new ReduceDuplicates());
     }
 
 }

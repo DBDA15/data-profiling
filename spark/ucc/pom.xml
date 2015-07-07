@@ -52,7 +52,7 @@
                 <version>2.4.1</version>
                 <configuration>
                     <descriptors>
-                        <descriptor>src/assembly/sparl-fat-jar.xml</descriptor>
+                        <descriptor>src/assembly/spark-fat-jar.xml</descriptor>
                         <descriptor>src/assembly/gather-dependencies.xml</descriptor>
                     </descriptors>
                     <archive>

@@ -90,6 +90,11 @@ public class UccSpark {
             currentLevel++;
 
             JavaRDD<Long> candidates = initial.groupBy(new GroupToTrue()).flatMap(new GenerateCandidates());
+            long a = candidates.count();
+            System.out.println("Candidates Length: "+a);
+            if (a < 10) {
+                print(candidates.collect());
+            }
             candidates = candidates.repartition(spark.defaultParallelism());            
             JavaRDD<Tuple2<Long, Boolean>> intersectedPLIs = candidates.map(new MapToIntersectedPLI(pliHashMap));
 

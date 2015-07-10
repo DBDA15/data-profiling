@@ -90,17 +90,17 @@ public class UccSpark {
             currentLevel++;
 
             JavaRDD<Long> candidates = initial.groupBy(new GroupToTrue()).flatMap(new GenerateCandidates());
-            long a = candidates.count();
-            System.out.println("Candidates Length: "+a);
-            if (a < 10) {
-                print(candidates.collect());
-            }
+//            long a = candidates.count();
+//            System.out.println("Candidates Length: "+a);
+//            if (a < 10) {
+//                print(candidates.collect());
+//            }
             candidates = candidates.repartition(spark.defaultParallelism());            
             JavaRDD<Tuple2<Long, Boolean>> intersectedPLIs = candidates.map(new MapToIntersectedPLI(pliHashMap));
 
-            JavaRDD<Tuple2<Long, Boolean>> initialUncached = intersectedPLIs.union(initial.filter(new FilterUCC()));
+            JavaRDD<Tuple2<Long, Boolean>> initialUncached = intersectedPLIs.union(initial.filter(new FilterUCC())).cache();
             initial.unpersist();
-            initial = initialUncached.cache();
+            initial = initialUncached;
 
             System.out.println("Finished another iteration: " + (System.currentTimeMillis() - startLoop) + "ms");
         }

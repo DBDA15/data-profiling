@@ -99,7 +99,7 @@ public class UccSpark {
             JavaRDD<Tuple2<Long, Boolean>> intersectedPLIs = candidates.map(new MapToIntersectedPLI(pliHashMap));
 
             JavaRDD<Tuple2<Long, Boolean>> initialUncached = intersectedPLIs.union(initial.filter(new FilterUCC())).cache();
-            initial.unpersist();
+            //initial.unpersist();
             initial = initialUncached;
 
             System.out.println("Finished another iteration: " + (System.currentTimeMillis() - startLoop) + "ms");

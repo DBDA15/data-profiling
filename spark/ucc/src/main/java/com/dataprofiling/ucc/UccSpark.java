@@ -85,7 +85,7 @@ public class UccSpark {
             pliHashMap.put(ele._1, ele._2);
         }
 
-        while (!initial.filter(new FilterNonUCC()).isEmpty() && currentLevel < levelsToCheck) {
+        while (!(initial.filter(new FilterNonUCC()).count() <2) && currentLevel < levelsToCheck) {
             long startLoop = System.currentTimeMillis();
             currentLevel++;
 

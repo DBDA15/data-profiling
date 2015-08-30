@@ -10,7 +10,6 @@ public class MapToCombined implements MapFunction<Tuple2<Long, long[]>, Tuple2<L
     public Tuple2<Long, Boolean> map(Tuple2<Long, long[]> value) throws Exception {
         // second parameter of return type is flag whether the Long represents a candidate or a UCC
         // it is true is it represents a candidate
-        System.out.println();
         return new Tuple2<Long, Boolean>(value.f0, value.f1.length >= 1);
     }
 
